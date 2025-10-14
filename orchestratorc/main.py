@@ -24,3 +24,4 @@ if __name__ == "__main__":
         print("\nTo add files:")
         print('   copy "path\\to\\your\\file.pdf" "uploads\\"')
         print('   python main.py')
+

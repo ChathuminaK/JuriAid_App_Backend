@@ -2,208 +2,214 @@
            🏛️ JuriAid: Legal Case Analysis Report
 ======================================================================
 
-Report Generated: 2025-10-13 02:56:06
+Report Generated: 2025-10-14 14:16:03
 Case Type: Family Law
 
 📋 EXECUTIVE SUMMARY
 -------------------------
-This case involves a family law matter. The case content contains approximately 17539 characters of legal text.
+This case involves a family law matter. The case content contains approximately 35390 characters of legal text.
 
 📄 CASE CONTENT PREVIEW
 -------------------------
+Here
+ 
+is
+ 
+the
+ 
+full
+ 
+English
+ 
+translation
+ 
+of
+ 
+the
+ 
+provided
+ 
+court
+ 
+document:
+ 
+ 
 Page
  
 1
  
  
-In
- 
-the
- 
-District
- 
-Court
- 
-of
- 
-Colombo.
- 
 Case
  
 Number:
  
-DDV/33/24
+2022
  
-Nature:
+Address:
  
-Divorce
+210/8,
  
-Value:
+ε
  
-Rs.
+---0000---
  
-5000/-
+τ
  
-Procedure:
+gen
  
-Regular
- 
-Loku
- 
-Hapu
- 
-Arachchige
- 
-Nirmani
- 
-Nadeeshika
- 
-Buddadasa
- 
-No.
- 
-133,
- 
-Shanthi
- 
-Mawatha,
- 
-Mulleriyawa,
- 
-Angoda.
- 
-Plaintiff
- 
--Versus-
- 
-Hewage
- 
-Tharindu
- 
-Disan
- 
-Rathnasiri
- 
-No.
- 
-297,
- 
-Angampitiya,
- 
-Padukka.
- 
-Defendant
- 
-On
- 
-this
- 
-03rd
- 
-day
- 
-of
- 
-February,
- 
-2024.
- 
-Submission
- 
-made
- 
-under
- 
-Section
- 
-72
- 
-of
- 
-the
- 
-Civil
- 
-Procedure
- 
-Code.
- 
-1.
- 
-I
- 
-am
- 
-the
+The
  
 above-named
  
-Defendant
+complainant,
  
-in
+from
+ 
+his
+ 
+memory,
+ 
+states
+ 
+as
+ 
+follows:
+ 
+1.
+ 
+The
+ 
+above-named
+ 
+complainant
+ 
+resides
+ 
+within
  
 the
  
-above-numbered
+jurisdiction
+ 
+of
+ 
+this
+ 
+court.
+ 
+Therefore,
+ 
+this
+ 
+honorable
+ 
+court
+ 
+has
+ 
+the
+ 
+jurisdiction
+ 
+to
+ 
+hear
+ 
+this
  
 case,
  
 and
  
-I
+the
  
-reside
+complainant
+ 
+attests
+ 
+to
+ 
+this
+ 
+fact.
+ 
+2.
+ 
+The
+ 
+complainant
+ 
+and
+ 
+the
+ 
+defendant
+ 
+were
+ 
+married
+ 
+on
+ 
+the
+ 
+14th
+ 
+day
+ 
+of
+ 
+June
+ 
+in
+ 
+the
+ 
+year
+ 
+2000
  
 at
  
 the
  
-above
+Mahaweli
  
-address.
+Reach
  
-2.
+Hotel
  
-I
+in
  
-hereby
+Kandy.
  
-state
+A
  
-that
+certified
  
-I
- 
-admit
- 
-the
- 
-cause
+copy
  
 of
  
-action
+the
  
-mentioned
+marriage
  
-in
+certificate,
+ 
+bearing
  
 the
  
-plaint
+number
  
-filed
+800800
  
-by
+and
  
-the
+dated
  
-Plaintiff
- 
-in
- 
-this
-...
+Jun...
 
 ⚖️ LEGAL ANALYSIS
 --------------------
@@ -219,259 +225,219 @@ this
 
 🎯 IDENTIFIED ISSUES
 --------------------
-1. The
+1. I
  
-Plaintiff
+respectfully
  
-states
- 
-that
- 
-after
- 
-the
- 
-marriage,
- 
-quarrels
- 
-arose
- 
-from
- 
-time
- 
-to
- 
-time
- 
-on
- 
-several
- 
-occasions,
- 
-and
- 
-as
- 
-those
- 
-conflicts
- 
-escalated
- 
-and
- 
-being
- 
-unable
- 
-to
- 
-further
- 
-bear
- 
-the
- 
-aforementioned
- 
-conduct
- 
-of
- 
-the
- 
-Defendant,
- 
-she
- 
-left
- 
-the
- 
-marital
- 
-home
- 
-on
- 
-or
- 
-around
- 
-19/01/2022
- 
-and
- 
-took
- 
-up
- 
-residence
- 
-at
+submit
  
 the
  
 Plaintiff's
  
-address
+proposed
  
-mentioned
+admissions
  
-in
+and
  
-the
- 
-caption
-2. It
- 
-is
- 
-respectfully
- 
-requested
- 
-that
- 
-this
- 
-case
- 
-be
- 
-called
- 
-in
- 
-open
- 
-court
- 
-on
- 
-2024/03/06
- 
-for
- 
-an
- 
-uncontested
- 
-hearing
- 
-to
- 
-conclude
- 
-the
- 
-matter
- 
-expeditiously
- 
-by
- 
-the
- 
-consent
- 
-of
- 
-both
- 
-parties
-3. Further,
- 
-by
- 
-this
- 
-consent
- 
-motion
- 
-submitted
+issues
  
 with
  
-the
+this
  
-signatures
+motion
  
-of
+and
  
-the
- 
-registered
- 
-attorneys-at-law
- 
-of
- 
-both
- 
-parties,
- 
-it
- 
-is
- 
-respectfully
- 
-requested
+request
  
 that
  
-this
- 
-case
+they
  
 be
  
-called
+accepted
+ 
+and
+ 
+filed
  
 in
  
-open
- 
-court
- 
-on
- 
-2024/03/06
- 
-for
- 
-an
- 
-uncontested
- 
-hearing
- 
-to
- 
-conclude
- 
 the
  
-matter
+case
  
-expeditiously
+record
+2. Plaintiff's
  
-by
+Proposed
  
-the
+Issues:
  
-consent
+1
+3. If
+ 
+one,
+ 
+several,
+ 
+or
+ 
+all
  
 of
  
-both
+the
  
-parties
+above
+ 
+issues
+ 
+are
+ 
+decided
+ 
+in
+ 
+favor
+ 
+of
+ 
+the
+ 
+plaintiff,
+ 
+is
+ 
+the
+ 
+plaintiff
+ 
+entitled
+ 
+to
+ 
+the
+ 
+reliefs
+ 
+prayed
+ 
+for
+ 
+in
+ 
+his
+ 
+plaint
+ 
+and
+ 
+replication?
+ 
+Attorney-at-Law
+ 
+for
+ 
+the
+ 
+Plaintiff
+ 
+Nadeeka
+ 
+Seneviratne
+ 
+ 
+Page
+ 
+10
+ 
+ 
+Case
+ 
+No
+4. [Details
+ 
+of
+ 
+parties]
+ 
+To
+ 
+the
+ 
+Honorable
+ 
+District
+ 
+Judge
+ 
+of
+ 
+Colombo
+ 
+The
+ 
+defendant
+ 
+in
+ 
+the
+ 
+above-numbered
+ 
+case
+ 
+respectfully
+ 
+submits
+ 
+the
+ 
+following
+ 
+admissions
+ 
+and
+ 
+issues
+ 
+and
+ 
+prays
+ 
+that
+ 
+they
+ 
+be
+ 
+accepted
+ 
+and
+ 
+filed
+ 
+in
+ 
+the
+ 
+case
+ 
+record
+5. Issues
+ 
+to
+ 
+be
+ 
+Determined:
+ 
+1
 
 💡 RECOMMENDATIONS
 --------------------

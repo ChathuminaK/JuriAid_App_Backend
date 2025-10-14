@@ -4,8 +4,13 @@ import PyPDF2
 from datetime import datetime
 
 # --- Configuration ---
-UPLOADS_DIR = os.path.join("uploads")
-OUTPUTS_DIR = os.path.join("outputs")
+# Get the directory where this script (core.py) is located.
+ORCHESTRATOR_DIR = os.path.dirname(os.path.abspath(__file__))
+
+# Define paths relative to the orchestrator's directory.
+UPLOADS_DIR = os.path.join(ORCHESTRATOR_DIR, "uploads")
+OUTPUTS_DIR = os.path.join(ORCHESTRATOR_DIR, "outputs")
+
 
 def extract_text_from_pdf(pdf_path):
     """Extract text content from a PDF file."""
@@ -320,3 +325,4 @@ def run_full_process():
         
     else:
         print("❌ Failed to process input file.")
+
