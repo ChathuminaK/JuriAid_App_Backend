@@ -1,3 +1,7 @@
 orchestratorc/.env
 /orchestratorc/orchestrator/outputs
 /orchestratorc/orchestrator/uploads
+/orchestratorc/__pycache__
+/orchestratorc/orchestrator/__pycache__
+/orchestratorc/orchestrator/__pycache__
+.vscode/extensions.json

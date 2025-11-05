@@ -1,6 +1,8 @@
 import os, json
 from datetime import datetime
 from typing import Dict, Any, List
+import warnings
+warnings.filterwarnings('ignore', category=FutureWarning)
 import google.generativeai as genai
 
 # Use absolute import and get API key from config

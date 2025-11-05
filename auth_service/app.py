@@ -3,6 +3,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.orm import Session
 from datetime import timedelta
 from typing import List
+from fastapi.responses import JSONResponse
 
 import database
 from models import User
@@ -28,25 +29,24 @@ from crud import (
     update_user_profile,
     get_all_users
 )
-from config import settings  # NEW
+from config import settings
 
 app = FastAPI(
     title="JuriAid Auth Service",
     version="1.0.0",
     description="Authentication & User Management Service for JuriAid Legal AI System",
-    debug=settings.DEBUG  # NEW
+    debug=settings.DEBUG  
 )
 
-# CORS configuration - use settings
+# CORS configuration 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=settings.CORS_ORIGINS,  # NEW
+    allow_origins=settings.CORS_ORIGINS, 
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-# Initialize database on startup
 @app.on_event("startup")
 def startup_event():
     print("🚀 Starting JuriAid Auth Service...")
@@ -177,6 +177,16 @@ def verify_token(current_user: User = Depends(get_current_user)):
         "subscription_tier": current_user.subscription_tier.value
     }
 
+@app.post("/auth/logout", response_model=MessageResponse)
+def logout(current_user: User = Depends(get_current_user)):
+    """
+    Logout user (client must delete token)
+    
+    This endpoint confirms the token is valid before logout.
+    The client should delete the JWT token from storage.
+    """
+    return MessageResponse(message="Successfully logged out. Please delete your token.")
+
 # Admin endpoints
 @app.get("/admin/users", response_model=List[UserResponse])
 def list_all_users(
@@ -197,17 +207,23 @@ def list_all_users(
 @app.exception_handler(HTTPException)
 async def http_exception_handler(request, exc: HTTPException):
     """Global HTTP exception handler"""
-    return {
-        "success": False,
-        "detail": exc.detail,
-        "status_code": exc.status_code
-    }
+    return JSONResponse(
+        status_code=exc.status_code,
+        content={
+            "success": False,
+            "detail": exc.detail,
+            "status_code": exc.status_code
+        }
+    )
 
 @app.exception_handler(Exception)
 async def general_exception_handler(request, exc: Exception):
     """Global exception handler"""
-    return {
-        "success": False,
-        "detail": "Internal server error",
-        "error": str(exc)
-    }
+    return JSONResponse(
+        status_code=500,
+        content={
+            "success": False,
+            "detail": "Internal server error",
+            "error": str(exc)
+        }
+    )
