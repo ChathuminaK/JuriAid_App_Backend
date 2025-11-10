@@ -8,10 +8,14 @@ from fastapi.responses import JSONResponse
 from .orchestrator.core import (
     UPLOADS_DIR,
     OUTPUTS_DIR,
+    read_input_file,
     process_single_file,        # orchestrates full pipeline
     analyze_case_content,       # text-only analysis
     generate_legal_summary      # builds summary
 )
+from .orchestrator.agent_gemini import GeminiPlannerAgent
+
+planner_agent = GeminiPlannerAgent(kb_path=os.path.join(OUTPUTS_DIR, "knowledge_base.json"))
 
 app = FastAPI(
     title="JuriAid Orchestrator API",
@@ -89,6 +93,26 @@ async def analyze_text(request: Request):
         "summary": summary,
         "timestamp": datetime.now().isoformat()
     }
+
+@app.post("/api/agent/plan-run")
+async def agent_plan_run(
+    file: UploadFile = File(..., description="PDF or TXT"),
+    prompt: str = Form(..., description="e.g. 'generate questions and save to knowledge base'")
+):
+    if not file.filename.lower().endswith((".pdf", ".txt")):
+        raise HTTPException(status_code=400, detail="Only PDF or TXT files supported.")
+    data = await file.read()
+    if not data:
+        raise HTTPException(status_code=400, detail="Empty file.")
+    tmp = os.path.join(UPLOADS_DIR, f"{datetime.now():%Y%m%d_%H%M%S}_{file.filename}")
+    with open(tmp, "wb") as f:
+        f.write(data)
+    case_text = read_input_file(tmp)
+    try:
+        out = planner_agent.run(case_text, prompt)
+        return JSONResponse(out)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
 @app.exception_handler(HTTPException)
 async def http_exc_handler(_, exc: HTTPException):
