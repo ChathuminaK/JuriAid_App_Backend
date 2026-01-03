@@ -3,9 +3,13 @@ from datetime import datetime
 from typing import Dict, Any, List
 import google.generativeai as genai
 
-from ..config import require_env
-from .core import analyze_case_content, generate_legal_summary
-from .tools import (
+# Use absolute import and get API key from config
+import sys
+sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
+from config import settings
+
+from orchestrator.core import analyze_case_content, generate_legal_summary
+from orchestrator.tools import (
     retrieve_family_law_statutes,
     find_divorce_case_precedents,
     generate_family_law_client_questions,
@@ -14,6 +18,9 @@ from .tools import (
     summarize_case,
     update_knowledge_base
 )
+
+# Configure Gemini with API key from settings
+genai.configure(api_key=settings.GEMINI_API_KEY)
 
 TOOL_REGISTRY = {
     "family_statutes": retrieve_family_law_statutes,
@@ -37,9 +44,6 @@ contract_questions, summarize, update_kb.
 Include summarize unless explicitly not needed. Use update_kb if user wants save/update/knowledge base.
 Match family vs contract by case type or prompt keywords. No extra text outside JSON.
 """
-
-# Configure Gemini using .env (loaded via config.py)
-genai.configure(api_key=require_env("GEMINI_API_KEY"))
 
 PREFERRED_MODELS = [
     "models/gemini-2.5-flash",            # fast, current
