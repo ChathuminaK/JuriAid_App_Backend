@@ -2,18 +2,20 @@ from datetime import datetime
 import os
 from typing import Optional
 
-from fastapi import FastAPI, UploadFile, File, HTTPException, Request, Form
+from fastapi import FastAPI, UploadFile, File, HTTPException, Request, Form, Depends
 from fastapi.responses import JSONResponse
 
-from .orchestrator.core import (
+# Absolute imports instead of relative
+from orchestrator.core import (
     UPLOADS_DIR,
     OUTPUTS_DIR,
     read_input_file,
-    process_single_file,        # orchestrates full pipeline
-    analyze_case_content,       # text-only analysis
-    generate_legal_summary      # builds summary
+    process_single_file,
+    analyze_case_content,
+    generate_legal_summary
 )
-from .orchestrator.agent_gemini import GeminiPlannerAgent
+from orchestrator.agent_gemini import GeminiPlannerAgent
+from auth_middleware import verify_user_token
 
 planner_agent = GeminiPlannerAgent(kb_path=os.path.join(OUTPUTS_DIR, "knowledge_base.json"))
 
@@ -35,8 +37,12 @@ def health():
         "outputs_dir": OUTPUTS_DIR
     }
 
+# Protected endpoints (require authentication)
 @app.post("/api/upload-case")
-async def upload_case(file: UploadFile = File(..., description="form-data key: file")):
+async def upload_case(
+    file: UploadFile = File(...),
+    user: dict = Depends(verify_user_token)
+):
     # Normalize common invalid states to a consistent message
     if not file or not getattr(file, "filename", "").strip():
         raise HTTPException(status_code=422, detail="Missing file upload (form-data key 'file').")
@@ -55,12 +61,19 @@ async def upload_case(file: UploadFile = File(..., description="form-data key: f
     result = process_single_file(dest)
     if not result.get("success"):
         raise HTTPException(status_code=500, detail=result.get("error", "Processing failed"))
+    
+    # Add user info to result
+    result["user_id"] = user["user_id"]
+    result["subscription_tier"] = user["subscription_tier"]
+    result["email"] = user["email"]
+    
     return JSONResponse(result)
 
 @app.post("/api/upload-case-with-prompt")
 async def upload_case_with_prompt(
     file: UploadFile = File(..., description="PDF or TXT"),
-    prompt: str = Form(..., description="User instruction / extra context")
+    prompt: str = Form(..., description="User instruction / extra context"),
+    user: dict = Depends(verify_user_token)
 ):
     if not file.filename.lower().endswith((".pdf", ".txt")):
         raise HTTPException(status_code=400, detail="Only PDF or TXT files supported.")
@@ -75,8 +88,33 @@ async def upload_case_with_prompt(
     if not result.get("success"):
         raise HTTPException(status_code=500, detail=result.get("error"))
     result["prompt_used"] = prompt
+    result["user_id"] = user["user_id"]
     return JSONResponse(result)
 
+@app.post("/api/agent/plan-run")
+async def agent_plan_run(
+    file: UploadFile = File(...),
+    prompt: str = Form(...),
+    user: dict = Depends(verify_user_token)
+):
+    if not file.filename.lower().endswith((".pdf", ".txt")):
+        raise HTTPException(status_code=400, detail="Only PDF or TXT files supported.")
+    data = await file.read()
+    if not data:
+        raise HTTPException(status_code=400, detail="Empty file.")
+    tmp = os.path.join(UPLOADS_DIR, f"{datetime.now():%Y%m%d_%H%M%S}_{file.filename}")
+    with open(tmp, "wb") as f:
+        f.write(data)
+    case_text = read_input_file(tmp)
+    try:
+        out = planner_agent.run(case_text, prompt)
+        out["user_id"] = user["user_id"]
+        out["email"] = user["email"]
+        return JSONResponse(out)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+# Public endpoints (no auth required)
 @app.post("/api/analyze-text")
 async def analyze_text(request: Request):
     body = await request.json()
@@ -93,26 +131,6 @@ async def analyze_text(request: Request):
         "summary": summary,
         "timestamp": datetime.now().isoformat()
     }
-
-@app.post("/api/agent/plan-run")
-async def agent_plan_run(
-    file: UploadFile = File(..., description="PDF or TXT"),
-    prompt: str = Form(..., description="e.g. 'generate questions and save to knowledge base'")
-):
-    if not file.filename.lower().endswith((".pdf", ".txt")):
-        raise HTTPException(status_code=400, detail="Only PDF or TXT files supported.")
-    data = await file.read()
-    if not data:
-        raise HTTPException(status_code=400, detail="Empty file.")
-    tmp = os.path.join(UPLOADS_DIR, f"{datetime.now():%Y%m%d_%H%M%S}_{file.filename}")
-    with open(tmp, "wb") as f:
-        f.write(data)
-    case_text = read_input_file(tmp)
-    try:
-        out = planner_agent.run(case_text, prompt)
-        return JSONResponse(out)
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
 
 @app.exception_handler(HTTPException)
 async def http_exc_handler(_, exc: HTTPException):
