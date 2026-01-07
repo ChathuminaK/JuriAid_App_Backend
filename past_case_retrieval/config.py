@@ -2,7 +2,7 @@
 import os
 
 # ---------- Project root ----------
-BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))  # Changed: removed one dirname()
 
 # ---------- Neo4j ----------
 NEO4J_URI = os.getenv("NEO4J_URI", "bolt://localhost:7687")

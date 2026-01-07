@@ -5,3 +5,6 @@ orchestratorc/.env
 /orchestratorc/orchestrator/__pycache__
 /orchestratorc/orchestrator/__pycache__
 .vscode/extensions.json
+/past_case_retrieval/__pycache__
+/orchestratorc/orchestrator/__pycache__
+/orchestratorc/orchestrator/__pycache__

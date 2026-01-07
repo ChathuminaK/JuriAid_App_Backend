@@ -14,10 +14,9 @@ from orchestrator.core import (
     generate_legal_summary
 )
 
-# Import only Gemini agent (LangChain has dependency conflicts)
 from orchestrator.agent_gemini import GeminiPlannerAgent
-from orchestrator.agent_langchain import LangChainPlannerAgent
-# from orchestrator.agent_langchain import LangChainPlannerAgent  # TODO: Fix dependency conflicts
+# from orchestrator.agent_langchain import LangChainPlannerAgent  # COMMENTED OUT - not used
+# TODO: Fix dependency conflicts
 
 from auth_middleware import verify_user_token
 
