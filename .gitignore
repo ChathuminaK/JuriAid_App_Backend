@@ -8,3 +8,6 @@ orchestratorc/.env
 /past_case_retrieval/__pycache__
 /orchestratorc/orchestrator/__pycache__
 /orchestratorc/orchestrator/__pycache__
+questionGen/.env
+*.pyc
+/questionGen/venv
