@@ -1,0 +1,13 @@
+fastapi
+uvicorn[standard]
+
+neo4j
+rank-bm25
+
+elasticsearch
+
+pydantic
+python-dotenv
+
+sentence-transformers
+numpy
