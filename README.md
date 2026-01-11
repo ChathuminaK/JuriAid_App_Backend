@@ -986,7 +986,7 @@ This project is developed as part of academic research. Please contact the autho
 
 ## 👥 Authors & Acknowledgments
 
-Developed as part of legal AI research at [Your Institution].
+Developed as part of legal AI research at SLIIT.
 
 **Research Areas**:
 - Knowledge Graphs for Legal Domain
@@ -995,21 +995,3 @@ Developed as part of legal AI research at [Your Institution].
 - Legal NLP
 
 ---
-
-## 📞 Contact & Support
-
-For questions, issues, or collaboration opportunities:
-
-- **GitHub Issues**: [Repository Issues Page]
-- **Email**: [Contact Email]
-- **Documentation**: [Wiki/Docs Link]
-
----
-
-<div align="center">
-
-**⚖️ JuriAid - Transforming Legal Research with AI**
-
-*Built with ❤️ for the Sri Lankan legal community*
-
-</div>
