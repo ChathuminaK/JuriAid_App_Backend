@@ -1,221 +1,289 @@
-import os
+"""
+JuriAid Orchestrator – LangGraph Agentic Workflow
+===================================================
+3-node graph:  reason  ─→  execute  ─→  reason  ─→  synthesize  ─→  END
+
+* **reason** – the "Senior Partner" LLM decides which tools to call
+  (or produces a final answer).
+* **execute** – invokes the selected tools asynchronously.
+* **synthesize** – formats the final structured response.
+
+Chat history is persisted in Redis so multi-turn conversations just
+work by passing the same ``session_id``.
+"""
+
+from __future__ import annotations
+
 import json
+import logging
 from datetime import datetime
-from typing import Dict, Any, List
+from typing import Any, Dict, List, Literal, Sequence
 
-from langchain_google_genai import ChatGoogleGenerativeAI
-from langchain.agents import AgentExecutor, create_structured_chat_agent
-from langchain.tools import Tool
-from langchain.prompts import ChatPromptTemplate, MessagesPlaceholder
-from langchain.schema import SystemMessage, HumanMessage
-from langchain.memory import ConversationBufferMemory
-
-import sys
-sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
-from config import settings
-
-from orchestrator.core import analyze_case_content, generate_legal_summary
-from orchestrator.tools import (
-    retrieve_family_law_statutes,
-    find_divorce_case_precedents,
-    generate_family_law_client_questions,
-    retrieve_contract_law_statutes,
-    generate_contract_review_questions,
-    summarize_case,
-    update_knowledge_base
+from langchain_core.messages import (
+    AIMessage,
+    BaseMessage,
+    HumanMessage,
+    SystemMessage,
+    ToolMessage,
 )
+from langchain_google_genai import ChatGoogleGenerativeAI
+from langgraph.graph import END, StateGraph
+from langgraph.prebuilt import ToolNode
+from typing_extensions import TypedDict
+
+from config import settings
+from orchestrator.tools import ALL_TOOLS
+
+logger = logging.getLogger("juriaid.agent")
+
+# ---------------------------------------------------------------------------
+# System prompt  (the "Senior Partner")
+# ---------------------------------------------------------------------------
+SYSTEM_PROMPT = """You are a **Senior Partner** at a top Sri Lankan law firm.
+You have access to the following specialised research tools:
+
+1. **search_law_statutes** – Search Sri Lankan statutes / Acts / Sections.
+2. **get_statute_by_act** – Get the full text of a specific Act by ID.
+3. **search_past_cases** – Find relevant court precedents via hybrid semantic + citation search.
+4. **generate_legal_questions** – Generate client-intake / case-preparation questions.
+5. **summarize_case** – Produce a structured JSON summary of a case.
+6. **update_knowledge_base** – Save a case to the local knowledge base.
+
+### Instructions
+- Think step-by-step about what information the user needs.
+- Call **one or more tools** in parallel when appropriate.
+- After receiving tool results, analyse them and produce a comprehensive
+  **Executive Summary** that **cites specific statutes and case names**.
+- If a tool returns an error or fallback data, mention that the specific
+  data source was temporarily unavailable but still answer with whatever
+  information is available.
+- Always be professional, precise, and reference Sri Lankan law.
+- When the user uploads a case document, start by summarising it, then
+  search for relevant statutes and past cases, then generate questions.
+"""
+
+# ---------------------------------------------------------------------------
+# State schema
+# ---------------------------------------------------------------------------
 
 
-class LangChainPlannerAgent:
-    """LangChain-powered legal case analysis agent"""
-    
-    def __init__(self, kb_path: str, model_name: str = "gemini-2.0-flash-exp"):
-        self.kb_path = kb_path
-        
-        # Initialize LLM
-        self.llm = ChatGoogleGenerativeAI(
-            model=model_name,
-            google_api_key=settings.GEMINI_API_KEY,
-            temperature=0.7,
-            convert_system_message_to_human=True  # For Gemini compatibility
+class AgentState(TypedDict):
+    messages: Sequence[BaseMessage]
+    session_id: str
+    case_text: str | None
+    final_answer: str | None
+
+
+# ---------------------------------------------------------------------------
+# LLM + tool binding
+# ---------------------------------------------------------------------------
+
+
+def _build_llm():
+    llm = ChatGoogleGenerativeAI(
+        model="gemini-1.5-flash",
+        google_api_key=settings.GEMINI_API_KEY,
+        temperature=0.3,
+        convert_system_message_to_human=True,
+    )
+    return llm.bind_tools(ALL_TOOLS)
+
+
+# ---------------------------------------------------------------------------
+# Graph nodes
+# ---------------------------------------------------------------------------
+
+_tool_node = ToolNode(ALL_TOOLS)
+
+
+async def reason_node(state: AgentState) -> dict:
+    """The LLM reasons about the conversation and optionally calls tools."""
+    llm = _build_llm()
+    response = await llm.ainvoke(state["messages"])
+    return {"messages": [response]}
+
+
+async def execute_node(state: AgentState) -> dict:
+    """Run whatever tool calls the LLM requested."""
+    result = await _tool_node.ainvoke(state)
+    # ToolNode returns {"messages": [ToolMessage, ...]}
+    return result
+
+
+async def synthesize_node(state: AgentState) -> dict:
+    """Extract the final AI message and store it as ``final_answer``."""
+    last = state["messages"][-1]
+    answer = last.content if isinstance(last, AIMessage) else str(last)
+    return {"final_answer": answer}
+
+
+# ---------------------------------------------------------------------------
+# Routing
+# ---------------------------------------------------------------------------
+
+
+def _after_reason(state: AgentState) -> Literal["execute", "synthesize"]:
+    last_msg = state["messages"][-1]
+    if isinstance(last_msg, AIMessage) and getattr(last_msg, "tool_calls", None):
+        return "execute"
+    return "synthesize"
+
+
+# ---------------------------------------------------------------------------
+# Build the graph (compiled once, reused for every request)
+# ---------------------------------------------------------------------------
+
+
+def build_graph():
+    g = StateGraph(AgentState)
+
+    g.add_node("reason", reason_node)
+    g.add_node("execute", execute_node)
+    g.add_node("synthesize", synthesize_node)
+
+    g.set_entry_point("reason")
+    g.add_conditional_edges("reason", _after_reason)
+    g.add_edge("execute", "reason")
+    g.add_edge("synthesize", END)
+
+    return g.compile()
+
+
+_graph = build_graph()
+
+
+# ---------------------------------------------------------------------------
+# Redis chat history helper
+# ---------------------------------------------------------------------------
+
+
+def get_session_history(session_id: str):
+    """Return a ``RedisChatMessageHistory`` instance for *session_id*.
+
+    Falls back to an in-memory list when Redis is not reachable.
+    """
+    try:
+        from langchain_community.chat_message_histories import (
+            RedisChatMessageHistory,
         )
-        
-        # Define tools
-        self.tools = self._create_tools()
-        
-        # Create agent
-        self.agent_executor = self._create_agent()
-        
-        print(f"[LangChainPlannerAgent] Initialized with model: {model_name}")
-    
-    def _create_tools(self) -> List[Tool]:
-        """Create LangChain tools from existing functions"""
-        return [
-            Tool(
-                name="family_statutes",
-                func=retrieve_family_law_statutes,
-                description="Retrieve relevant Family Law statutes from Sri Lankan law. Use this for divorce, custody, maintenance cases."
-            ),
-            Tool(
-                name="family_precedents",
-                func=find_divorce_case_precedents,
-                description="Find similar divorce and family law case precedents. Use for legal precedent research."
-            ),
-            Tool(
-                name="family_questions",
-                func=generate_family_law_client_questions,
-                description="Generate client interview questions for family law cases. Use to prepare for client meetings."
-            ),
-            Tool(
-                name="contract_statutes",
-                func=retrieve_contract_law_statutes,
-                description="Retrieve Contract Law statutes. Use for contract disputes, breach of contract cases."
-            ),
-            Tool(
-                name="contract_questions",
-                func=generate_contract_review_questions,
-                description="Generate contract review questions. Use for contract analysis and due diligence."
-            ),
-            Tool(
-                name="summarize",
-                func=lambda x: summarize_case(x),
-                description="Summarize a legal case into key points. Always use this for case overview."
-            ),
-            Tool(
-                name="update_kb",
-                func=lambda x: self._update_kb_wrapper(x),
-                description="Save case to knowledge base for future reference. Use when user wants to save/store case."
-            ),
-        ]
-    
-    def _update_kb_wrapper(self, case_text: str) -> Dict[str, Any]:
-        """Wrapper for update_knowledge_base with context"""
-        analysis = analyze_case_content(case_text)
-        metadata = {
-            "case_type": analysis["case_type"],
-            "tags": self._extract_tags(case_text),
-            "timestamp": datetime.now().isoformat()
-        }
-        return update_knowledge_base(case_text, metadata, self.kb_path)
-    
-    def _extract_tags(self, case_text: str) -> List[str]:
-        """Extract relevant tags from case text"""
-        keywords = ["divorce", "custody", "maintenance", "contract", "breach", "agreement", 
-                   "property", "child", "alimony", "separation"]
-        text_lower = case_text.lower()
-        return [kw for kw in keywords if kw in text_lower]
-    
-    def _create_agent(self) -> AgentExecutor:
-        """Create the LangChain agent with structured chat"""
-        
-        # System prompt
-        system_message = """You are a Sri Lankan legal analysis AI assistant specializing in Family Law and Contract Law.
 
-Your task is to analyze legal cases and use available tools to provide comprehensive legal insights.
+        return RedisChatMessageHistory(session_id=session_id, url=settings.REDIS_URL)
+    except Exception as exc:
+        logger.warning("Redis unavailable (%s) – using in-memory history", exc)
+        return None
 
-Available tools:
-- family_statutes: Get Family Law statutes
-- family_precedents: Find divorce case precedents  
-- family_questions: Generate client interview questions
-- contract_statutes: Get Contract Law statutes
-- contract_questions: Generate contract review questions
-- summarize: Summarize the case
-- update_kb: Save case to knowledge base
 
-IMPORTANT:
-1. Always start by summarizing the case
-2. Identify case type (Family Law or Contract Law)
-3. Use relevant tools based on case type
-4. Provide structured, professional legal analysis
-5. Format output clearly with sections and bullet points
+# ---------------------------------------------------------------------------
+# Public entry point
+# ---------------------------------------------------------------------------
 
-Think step by step about which tools to use."""
 
-        # Create prompt template
-        prompt = ChatPromptTemplate.from_messages([
-            ("system", system_message),
-            MessagesPlaceholder(variable_name="chat_history", optional=True),
-            ("human", "{input}"),
-            MessagesPlaceholder(variable_name="agent_scratchpad"),
-        ])
-        
-        # Create agent
-        agent = create_structured_chat_agent(
-            llm=self.llm,
-            tools=self.tools,
-            prompt=prompt
-        )
-        
-        # Create executor with memory
-        memory = ConversationBufferMemory(
-            memory_key="chat_history",
-            return_messages=True
-        )
-        
-        return AgentExecutor(
-            agent=agent,
-            tools=self.tools,
-            memory=memory,
-            verbose=True,  # Show reasoning steps
-            max_iterations=5,
-            handle_parsing_errors=True,
-            return_intermediate_steps=True
-        )
-    
-    def run(self, case_text: str, prompt: str) -> Dict[str, Any]:
-        """
-        Run the LangChain agent on a case
-        
-        Args:
-            case_text: The legal case text
-            prompt: User's instruction/question
-            
-        Returns:
-            Structured analysis results
-        """
-        # Prepare input
-        full_input = f"""Case Type Analysis Needed
+async def run_agent(
+    query: str,
+    session_id: str,
+    case_text: str | None = None,
+) -> Dict[str, Any]:
+    """Run the LangGraph agent for a single turn.
 
-User Request: {prompt}
+    Parameters
+    ----------
+    query : str
+        The user's natural-language question / instruction.
+    session_id : str
+        Unique conversation ID (used for Redis memory).
+    case_text : str | None
+        Optional raw document text (e.g. from a PDF upload).
 
-Case Details:
-{case_text[:2000]}...
-
-Please analyze this case and provide comprehensive legal insights using the available tools."""
-
+    Returns
+    -------
+    dict  with keys: success, session_id, answer, tool_calls_made, timestamp
+    """
+    # ── load history ──
+    history_store = get_session_history(session_id)
+    past_messages: List[BaseMessage] = []
+    if history_store is not None:
         try:
-            # Run agent
-            result = self.agent_executor.invoke({"input": full_input})
-            
-            # Extract intermediate steps (tool calls)
-            steps = []
-            if "intermediate_steps" in result:
-                for action, observation in result["intermediate_steps"]:
-                    steps.append({
-                        "tool": action.tool,
-                        "tool_input": action.tool_input,
-                        "output": observation
-                    })
-            
-            # Analyze case for metadata
-            analysis = analyze_case_content(case_text)
-            
-            # Format response
-            return {
-                "success": True,
-                "case_type": analysis["case_type"],
-                "agent_output": result.get("output", ""),
-                "tool_calls": steps,
-                "prompt": prompt,
-                "timestamp": datetime.now().isoformat(),
-                "framework": "langchain",
-                "model": "gemini-2.0-flash-exp"
+            past_messages = list(history_store.messages)
+        except Exception:
+            past_messages = []
+
+    # ── build messages ──
+    messages: List[BaseMessage] = [SystemMessage(content=SYSTEM_PROMPT)]
+    messages.extend(past_messages)
+
+    # If case_text supplied, prepend it as context
+    if case_text:
+        messages.append(
+            HumanMessage(
+                content=(
+                    f"I am uploading a legal case document. Here is the extracted text:\n\n"
+                    f"---BEGIN CASE---\n{case_text[:4000]}\n---END CASE---\n\n"
+                    f"User instruction: {query}"
+                )
+            )
+        )
+    else:
+        messages.append(HumanMessage(content=query))
+
+    # ── invoke graph ──
+    try:
+        final_state = await _graph.ainvoke(
+            {
+                "messages": messages,
+                "session_id": session_id,
+                "case_text": case_text,
+                "final_answer": None,
             }
-            
-        except Exception as e:
-            return {
-                "success": False,
-                "error": str(e),
-                "case_type": "unknown",
-                "timestamp": datetime.now().isoformat()
-            }
+        )
+
+        answer = final_state.get("final_answer") or ""
+
+        # ── collect which tools were called ──
+        tool_calls_made: List[str] = []
+        for msg in final_state["messages"]:
+            if isinstance(msg, ToolMessage):
+                tool_calls_made.append(msg.name)
+
+        # ── persist to Redis ──
+        if history_store is not None:
+            try:
+                user_msg = messages[-1]  # the HumanMessage we just added
+                history_store.add_message(user_msg)
+                history_store.add_message(AIMessage(content=answer))
+            except Exception as exc:
+                logger.warning("Could not persist to Redis: %s", exc)
+
+        return {
+            "success": True,
+            "session_id": session_id,
+            "answer": answer,
+            "tool_calls_made": tool_calls_made,
+            "timestamp": datetime.now().isoformat(),
+        }
+
+    except Exception as exc:
+        logger.exception("Agent run failed")
+        return {
+            "success": False,
+            "session_id": session_id,
+            "error": str(exc),
+            "timestamp": datetime.now().isoformat(),
+        }
+
+
+# ---------------------------------------------------------------------------
+# Retrieve full chat history (for GET /api/chat/history)
+# ---------------------------------------------------------------------------
+
+
+def get_chat_history(session_id: str) -> List[Dict[str, str]]:
+    store = get_session_history(session_id)
+    if store is None:
+        return []
+    try:
+        return [
+            {"role": type(m).__name__, "content": m.content}
+            for m in store.messages
+        ]
+    except Exception:
+        return []

@@ -1,4 +1,4 @@
-import os, json
+import os, json, asyncio
 from datetime import datetime
 from typing import Dict, Any, List
 import warnings
@@ -12,16 +12,87 @@ from config import settings
 
 from orchestrator.core import analyze_case_content, generate_legal_summary
 from orchestrator.tools import (
-    retrieve_family_law_statutes,
-    find_divorce_case_precedents,
-    generate_family_law_client_questions,
-    summarize_case,
-    update_knowledge_base
+    search_law_statutes,
+    search_past_cases,
+    generate_legal_questions,
+    summarize_case as summarize_case_tool,
+    update_knowledge_base as update_kb_tool
 )
 
 # Configure Gemini with API key from settings
 genai.configure(api_key=settings.GEMINI_API_KEY)
 
+# ── Async-to-sync bridge ──────────────────────────────────────
+def _run_async(coro):
+    """Run an async tool synchronously."""
+    try:
+        loop = asyncio.get_event_loop()
+        if loop.is_running():
+            import concurrent.futures
+            with concurrent.futures.ThreadPoolExecutor() as pool:
+                return pool.submit(asyncio.run, coro).result()
+        return loop.run_until_complete(coro)
+    except RuntimeError:
+        return asyncio.run(coro)
+
+def retrieve_family_law_statutes(case_text, **kwargs):
+    result = _run_async(search_law_statutes.ainvoke(case_text[:500]))
+    if isinstance(result, str):
+        try:
+            return json.loads(result)
+        except Exception:
+            return [{"text": result}]
+    return result
+
+def find_divorce_case_precedents(case_text, **kwargs):
+    result = _run_async(search_past_cases.ainvoke(case_text[:500]))
+    if isinstance(result, str):
+        try:
+            return json.loads(result)
+        except Exception:
+            return [{"text": result}]
+    return result
+
+def generate_family_law_client_questions(case_text, statutes=None, precedents=None, summary=None, **kwargs):
+    law_ctx = json.dumps(statutes)[:500] if statutes else "N/A"
+    cases_ctx = json.dumps(precedents)[:500] if precedents else "N/A"
+    result = _run_async(generate_legal_questions.ainvoke({
+        "case_text": case_text[:500],
+        "law_context": law_ctx,
+        "past_cases_context": cases_ctx
+    }))
+    if isinstance(result, str):
+        try:
+            return json.loads(result)
+        except Exception:
+            return {"questions": [result]}
+    return result
+
+def summarize_case(case_text, **kwargs):
+    result = _run_async(summarize_case_tool.ainvoke(case_text[:1000]))
+    if isinstance(result, str):
+        try:
+            return json.loads(result)
+        except Exception:
+            return {"summary": result}
+    return result
+
+def update_knowledge_base(case_text, meta=None, kb_path=None, **kwargs):
+    case_type = "General"
+    if isinstance(meta, dict):
+        case_type = meta.get("case_type", "General")
+    result = _run_async(update_kb_tool.ainvoke({
+        "case_text": case_text[:500],
+        "case_type": case_type
+    }))
+    if isinstance(result, str):
+        try:
+            return json.loads(result)
+        except Exception:
+            return {"status": result}
+    return result
+
+# ── Tool registry (unchanged names for GeminiPlannerAgent) ────
 TOOL_REGISTRY = {
     "family_statutes": retrieve_family_law_statutes,
     "family_precedents": find_divorce_case_precedents,
@@ -62,32 +133,33 @@ No extra text outside JSON.
 """
 
 PREFERRED_MODELS = [
-    "models/gemini-1.5-flash",            
-    "models/gemini-1.5-pro",              
+    "models/gemini-1.5-flash",
+    "models/gemini-1.5-pro",
     "models/gemini-flash-latest",
     "models/gemini-pro-latest",
-    "models/gemini-2.0-flash-exp",        
+    "models/gemini-2.0-flash-exp",
 ]
 
 def _resolve_model() -> str:
-    """Pick first preferred model supporting generateContent; fall back to any flash/pro model."""
-    all_supported = [
-        m.name for m in genai.list_models()
-        if "generateContent" in getattr(m, "supported_generation_methods", [])
-    ]
-    # Try preferred list
-    for pm in PREFERRED_MODELS:
-        if pm in all_supported:
-            return pm
-    # Fallback: choose first flash/pro/gemma model
-    for name in all_supported:
-        low = name.lower()
-        if any(k in low for k in ["2.0-flash", "flash-latest", "pro-latest", "gemini-flash", "gemini-pro"]):
-            return name
-    # Absolute last resort
-    if all_supported:
-        return all_supported[0]
-    raise RuntimeError(f"No usable Gemini model found. Supported list empty.")
+    """Pick a Gemini model. Tries list_models first, falls back to hardcoded name."""
+    try:
+        all_supported = [
+            m.name for m in genai.list_models()
+            if "generateContent" in getattr(m, "supported_generation_methods", [])
+        ]
+        for pm in PREFERRED_MODELS:
+            if pm in all_supported:
+                return pm
+        for name in all_supported:
+            low = name.lower()
+            if any(k in low for k in ["2.0-flash", "flash-latest", "pro-latest", "gemini-flash", "gemini-pro"]):
+                return name
+        if all_supported:
+            return all_supported[0]
+    except Exception as e:
+        print(f"[GeminiPlannerAgent] list_models() failed: {e}")
+        print("[GeminiPlannerAgent] Using default model: gemini-1.5-flash")
+    return "gemini-1.5-flash"
 
 class GeminiPlannerAgent:
     def __init__(self, kb_path: str):
@@ -117,8 +189,7 @@ class GeminiPlannerAgent:
         analysis = analyze_case_content(case_text)
         plan = self._get_plan(case_text, prompt, analysis["case_type"])
         results = []
-        
-        # Store outputs from previous tools for context
+
         context_data = {
             "case_text": case_text,
             "case_type": analysis["case_type"],
@@ -126,62 +197,45 @@ class GeminiPlannerAgent:
             "precedents": None,
             "summary": None
         }
-        
+
         print(f"[GeminiAgent] Executing {len(plan['steps'])} planned steps...")
-        
+
         for step in plan["steps"]:
             name = step["tool"]
             fn = TOOL_REGISTRY.get(name)
             if not fn:
                 results.append({"tool": name, "error": "not implemented"})
                 continue
-            
+
             print(f"[GeminiAgent] Executing tool: {name}")
-            
-            # Execute tools and capture their outputs
+
             if name == "update_kb":
                 out = fn(case_text, {"case_type": analysis["case_type"], "tags": self._tags(case_text)}, self.kb_path)
-            
             elif name == "summarize":
                 out = fn(case_text)
-                context_data["summary"] = out  # Store for family_questions
-                print(f"[GeminiAgent] Summary stored: {out.get('title', 'N/A')}")
-            
+                context_data["summary"] = out
             elif name == "family_statutes":
                 out = fn(case_text)
-                context_data["statutes"] = out  # Store for family_questions
-                print(f"[GeminiAgent] Statutes stored: {len(out)} items")
-            
+                context_data["statutes"] = out
             elif name == "family_precedents":
                 out = fn(case_text)
-                context_data["precedents"] = out  # Store for family_questions
-                print(f"[GeminiAgent] Precedents stored: {len(out)} items")
-            
+                context_data["precedents"] = out
             elif name == "family_questions":
-                # Pass ALL previous context
-                print(f"[GeminiAgent] Generating family questions with context:")
-                print(f"  - Statutes: {len(context_data['statutes']) if context_data['statutes'] else 0}")
-                print(f"  - Precedents: {len(context_data['precedents']) if context_data['precedents'] else 0}")
-                print(f"  - Summary: {'Yes' if context_data['summary'] else 'No'}")
-                
                 out = fn(
                     case_text=case_text,
                     statutes=context_data.get("statutes"),
                     precedents=context_data.get("precedents"),
                     summary=context_data.get("summary")
                 )
-            
             else:
                 out = fn()
-            
+
             results.append({"tool": name, "rationale": step.get("rationale",""), "output": out})
-        
-        # Generate comprehensive summary using AI if not already done
+
         if context_data["summary"] is None:
-            print("[GeminiAgent] Generating core summary...")
             summary_result = summarize_case(case_text)
             results.append({"tool": "core_summary", "output": summary_result})
-        
+
         return {
             "success": True,
             "case_type": analysis["case_type"],
