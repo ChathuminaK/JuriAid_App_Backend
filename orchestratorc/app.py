@@ -91,7 +91,7 @@ async def health():
     return {
         "status": "ok",
         "time": datetime.now().isoformat(),
-        "agent": "langgraph-gemini-1.5-flash",
+        "agent": "langgraph-gemini-2.5-flash",
         "services": {
             "auth": await _ping(f"{settings.AUTH_SERVICE_URL}/"),
             "lawstatkg": await _ping(f"{settings.LAWSTATKG_SERVICE_URL}/docs"),
