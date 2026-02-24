@@ -133,11 +133,11 @@ No extra text outside JSON.
 """
 
 PREFERRED_MODELS = [
+    "models/gemini-2.5-flash",
+    "models/gemini-2.5-pro",
+    "models/gemini-2.0-flash-exp",
     "models/gemini-1.5-flash",
     "models/gemini-1.5-pro",
-    "models/gemini-flash-latest",
-    "models/gemini-pro-latest",
-    "models/gemini-2.0-flash-exp",
 ]
 
 def _resolve_model() -> str:
@@ -152,14 +152,14 @@ def _resolve_model() -> str:
                 return pm
         for name in all_supported:
             low = name.lower()
-            if any(k in low for k in ["2.0-flash", "flash-latest", "pro-latest", "gemini-flash", "gemini-pro"]):
+            if any(k in low for k in ["2.5-flash", "2.5-pro", "flash-latest", "pro-latest", "gemini-flash", "gemini-pro"]):
                 return name
         if all_supported:
             return all_supported[0]
     except Exception as e:
         print(f"[GeminiPlannerAgent] list_models() failed: {e}")
-        print("[GeminiPlannerAgent] Using default model: gemini-1.5-flash")
-    return "gemini-1.5-flash"
+        print("[GeminiPlannerAgent] Using default model: gemini-2.5-flash")
+    return "gemini-2.5-flash"
 
 class GeminiPlannerAgent:
     def __init__(self, kb_path: str):
