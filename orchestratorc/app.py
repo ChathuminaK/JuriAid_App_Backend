@@ -1,9 +1,3 @@
-"""
-JuriAid Orchestrator – FastAPI application
-============================================
-Primary entry point for the Agentic AI backend.
-"""
-
 from __future__ import annotations
 
 import os
@@ -260,30 +254,34 @@ async def upload_case_with_prompt(
 
 
 @app.post("/api/agent/plan-run")
-async def agent_plan_run(
-    file: UploadFile = File(...),
-    prompt: str = Form(...),
-    user: dict = Depends(verify_user_token),
-):
-    """Legacy Gemini planner agent (kept as fallback)."""
-    if not file.filename.lower().endswith((".pdf", ".txt")):
-        raise HTTPException(400, "Only PDF or TXT files supported.")
-    data = await file.read()
-    if not data:
-        raise HTTPException(400, "Empty file.")
+async def plan_and_execute(request: dict, user_id: str = Depends(get_current_user_id)):
+    session_id = request.get("session_id", f"session_{int(time.time())}")
+    case_snippet = request.get("case_snippet", "")
+    user_prompt = request.get("prompt", "Analyze this case")
+    
+    # RETRIEVE CASE HISTORY
+    existing_case = memory_manager.get_case_context(session_id)
+    
+    # ENHANCE PROMPT WITH HISTORY
+    if existing_case:
+        context_prompt = f"""
+Previous Analysis Summary:
+{existing_case.get('analysis_history', [])}
 
-    tmp = os.path.join(UPLOADS_DIR, f"{datetime.now():%Y%m%d_%H%M%S}_{file.filename}")
-    with open(tmp, "wb") as fh:
-        fh.write(data)
+New User Request: {user_prompt}
 
-    case_text = read_input_file(tmp)
-    try:
-        out = planner_agent.run(case_text, prompt)
-        out["user_id"] = user["user_id"]
-        out["email"] = user.get("email")
-        return JSONResponse(out)
-    except Exception as exc:
-        raise HTTPException(500, str(exc))
+Based on previous analysis, focus on what's new or updated.
+"""
+        user_prompt = context_prompt
+    
+    # CREATE PLAN
+    plan_result = await agent.create_plan(case_snippet, user_prompt)
+    
+    # SAVE RESULTS
+    memory_manager.update_case_history(session_id, plan_result)
+    memory_manager.save_conversation_turn(session_id, user_prompt, plan_result)
+    
+    return plan_result
 
 
 @app.post("/api/analyze-text")

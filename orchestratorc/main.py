@@ -1,5 +1,3 @@
-"""CLI entry-point for running the orchestrator without uvicorn."""
-
 import os
 
 from orchestrator.core import run_full_process, UPLOADS_DIR, OUTPUTS_DIR

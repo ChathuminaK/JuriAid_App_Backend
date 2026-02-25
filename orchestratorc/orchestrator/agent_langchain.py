@@ -1,17 +1,3 @@
-"""
-JuriAid Orchestrator – LangGraph Agentic Workflow
-===================================================
-3-node graph:  reason  ─→  execute  ─→  reason  ─→  synthesize  ─→  END
-
-* **reason** – the "Senior Partner" LLM decides which tools to call
-  (or produces a final answer).
-* **execute** – invokes the selected tools asynchronously.
-* **synthesize** – formats the final structured response.
-
-Chat history is persisted in Redis so multi-turn conversations just
-work by passing the same ``session_id``.
-"""
-
 from __future__ import annotations
 
 import json
@@ -33,129 +19,248 @@ from typing_extensions import TypedDict
 
 from config import settings
 from orchestrator.tools import ALL_TOOLS
+from orchestrator.reasoning import create_reasoning_engine
 
 logger = logging.getLogger("juriaid.agent")
 
-# ---------------------------------------------------------------------------
-# System prompt  (the "Senior Partner")
-# ---------------------------------------------------------------------------
-SYSTEM_PROMPT = """You are a **Senior Partner** at a top Sri Lankan law firm.
-You have access to the following specialised research tools:
+# Create reasoning engine instance
+reasoning_engine = create_reasoning_engine()
 
-1. **search_law_statutes** – Search Sri Lankan statutes / Acts / Sections.
-2. **get_statute_by_act** – Get the full text of a specific Act by ID.
-3. **search_past_cases** – Find relevant court precedents via hybrid semantic + citation search.
-4. **generate_legal_questions** – Generate client-intake / case-preparation questions.
-5. **summarize_case** – Produce a structured JSON summary of a case.
-6. **update_knowledge_base** – Save a case to the local knowledge base.
 
-### Instructions
-- Think step-by-step about what information the user needs.
-- Call **one or more tools** in parallel when appropriate.
-- After receiving tool results, analyse them and produce a comprehensive
-  **Executive Summary** that **cites specific statutes and case names**.
-- If a tool returns an error or fallback data, mention that the specific
-  data source was temporarily unavailable but still answer with whatever
-  information is available.
-- Always be professional, precise, and reference Sri Lankan law.
-- When the user uploads a case document, start by summarising it, then
-  search for relevant statutes and past cases, then generate questions.
+# ---------------------------------------------------------------------------
+# Enhanced System Prompt with Reasoning Integration
+# ---------------------------------------------------------------------------
+SYSTEM_PROMPT = """You are a **Senior Partner** at a top Sri Lankan law firm with advanced legal reasoning capabilities.
+
+You work in collaboration with an advanced reasoning engine that provides:
+- Rule-based case classification and analysis
+- Strategic planning based on case urgency and complexity
+- Quality control checks
+
+Your role is to:
+1. Consider the reasoning engine's analysis and recommendations
+2. Apply your legal expertise to validate and enhance the plan
+3. Execute the recommended tools
+4. Synthesize results into comprehensive legal advice
+
+Available tools:
+- **search_law_statutes** – Search Sri Lankan statutes/Acts/Sections
+- **get_statute_by_act** – Retrieve full Act text by ID
+- **search_past_cases** – Find relevant court precedents
+- **generate_legal_questions** – Generate client intake questions
+- **summarize_case** – Produce structured case summary
+- **update_knowledge_base** – Save case to knowledge base
+
+Always cite specific statutes and case names in your analysis.
+Be professional, precise, and grounded in Sri Lankan law.
 """
 
-# ---------------------------------------------------------------------------
-# State schema
-# ---------------------------------------------------------------------------
 
+# ---------------------------------------------------------------------------
+# State schema (unchanged)
+# ---------------------------------------------------------------------------
 
 class AgentState(TypedDict):
+    """State shared across all nodes"""
     messages: Sequence[BaseMessage]
-    session_id: str
-    case_text: str | None
-    final_answer: str | None
+    case_text: str
+    user_prompt: str
+    reasoning_analysis: Dict[str, Any]  # NEW: Reasoning engine output
+    next_action: str
 
 
 # ---------------------------------------------------------------------------
-# LLM + tool binding
+# LLM setup (unchanged)
 # ---------------------------------------------------------------------------
-
 
 def _build_llm():
+    """Build the LLM with tools bound"""
     llm = ChatGoogleGenerativeAI(
-        model="gemini-1.5-flash",
-        google_api_key=settings.GEMINI_API_KEY,
-        temperature=0.3,
-        convert_system_message_to_human=True,
+        model="gemini-2.5-flash",
+        temperature=0.1,
+        google_api_key=settings.GEMINI_API_KEY
     )
     return llm.bind_tools(ALL_TOOLS)
 
 
 # ---------------------------------------------------------------------------
-# Graph nodes
+# Enhanced Graph Nodes
 # ---------------------------------------------------------------------------
 
 _tool_node = ToolNode(ALL_TOOLS)
 
 
 async def reason_node(state: AgentState) -> dict:
-    """The LLM reasons about the conversation and optionally calls tools."""
+    """
+    Enhanced reasoning node that combines LLM reasoning with rule-based analysis
+    """
+    logger.info("[REASON NODE] Starting hybrid reasoning analysis...")
+    
+    messages = list(state["messages"])
+    case_text = state.get("case_text", "")
+    user_prompt = state.get("user_prompt", "")
+    
+    # Step 1: Get hybrid reasoning engine analysis
+    reasoning_output = reasoning_engine.analyze_and_plan(
+        case_text=case_text,
+        user_prompt=user_prompt,
+        llm_analysis=None  # Will be enhanced in next iteration
+    )
+    
+    logger.info(f"[REASON NODE] Case classified as: {reasoning_output['case_context']['category']}")
+    logger.info(f"[REASON NODE] Urgency: {reasoning_output['case_context']['urgency']}")
+    logger.info(f"[REASON NODE] Complexity: {reasoning_output['case_context']['complexity']:.2f}")
+    logger.info(f"[REASON NODE] Recommended tools: {len(reasoning_output['recommended_tools'])}")
+    
+    # Step 2: Prepare enhanced context for LLM
+    reasoning_context = f"""
+### Reasoning Engine Analysis:
+
+**Case Classification:**
+- Category: {reasoning_output['case_context']['category']}
+- Urgency: {reasoning_output['case_context']['urgency']}
+- Complexity Score: {reasoning_output['case_context']['complexity']:.2f}
+
+**Key Facts Identified:**
+{chr(10).join(f'- {fact}' for fact in reasoning_output['case_context']['key_facts'][:5])}
+
+**Legal Issues:**
+{chr(10).join(f'- {issue}' for issue in reasoning_output['case_context']['legal_issues'])}
+
+**Recommended Tool Sequence:**
+{chr(10).join(f"{i+1}. {tool['tool']}: {tool['rationale']}" 
+             for i, tool in enumerate(reasoning_output['recommended_tools']))}
+
+**Strategic Reasoning:**
+{chr(10).join(f'- {r}' for r in reasoning_output['reasoning'])}
+
+Please validate this analysis and proceed with the recommended tools, or suggest modifications based on your legal expertise.
+"""
+    
+    # Step 3: Add reasoning context to messages
+    messages.insert(-1, SystemMessage(content=reasoning_context))
+    
+    # Step 4: Get LLM decision with enhanced context
     llm = _build_llm()
-    response = await llm.ainvoke(state["messages"])
-    return {"messages": [response]}
+    response = await llm.ainvoke(messages)
+    
+    # Step 5: Store reasoning analysis in state
+    return {
+        "messages": messages + [response],
+        "reasoning_analysis": reasoning_output,
+        "next_action": "execute" if response.tool_calls else "synthesize"
+    }
 
 
 async def execute_node(state: AgentState) -> dict:
-    """Run whatever tool calls the LLM requested."""
+    """Execute tools (unchanged but logs reasoning context)"""
+    logger.info("[EXECUTE NODE] Executing tools based on reasoning analysis...")
+    
+    reasoning_analysis = state.get("reasoning_analysis", {})
+    if reasoning_analysis:
+        logger.info(f"[EXECUTE NODE] Case context: {reasoning_analysis['case_context']['category']}")
+    
     result = await _tool_node.ainvoke(state)
-    # ToolNode returns {"messages": [ToolMessage, ...]}
     return result
 
 
 async def synthesize_node(state: AgentState) -> dict:
-    """Extract the final AI message and store it as ``final_answer``."""
-    last = state["messages"][-1]
-    answer = last.content if isinstance(last, AIMessage) else str(last)
-    return {"final_answer": answer}
+    """
+    Enhanced synthesis with quality checks from reasoning engine
+    """
+    logger.info("[SYNTHESIZE NODE] Generating final response with quality validation...")
+    
+    messages = list(state["messages"])
+    reasoning_analysis = state.get("reasoning_analysis", {})
+    
+    # Add quality check context
+    quality_context = ""
+    if reasoning_analysis and "quality_checks" in reasoning_analysis:
+        quality_context = "\n\n### Quality Checks:\n"
+        for check in reasoning_analysis["quality_checks"]:
+            status = "✓ PASS" if check["passed"] else "✗ FAIL"
+            quality_context += f"{status}: {check['message']}\n"
+    
+    synthesis_prompt = f"""Based on all the tool results above, provide a comprehensive legal analysis with:
+
+1. **Executive Summary** - Brief overview of the case and findings
+2. **Applicable Law** - Specific statutes and sections (with citations)
+3. **Relevant Precedents** - Key cases (with names and citations)
+4. **Legal Analysis** - Detailed reasoning
+5. **Recommended Actions** - Next steps with priorities
+6. **Client Questions** - Important questions to clarify (if generated)
+
+{quality_context}
+
+Format your response in structured markdown.
+Be thorough, professional, and cite specific legal references.
+"""
+    
+    messages.append(HumanMessage(content=synthesis_prompt))
+    
+    llm = ChatGoogleGenerativeAI(
+        model="gemini-2.5-flash",
+        temperature=0.2,
+        google_api_key=settings.GEMINI_API_KEY
+    )
+    
+    final_response = await llm.ainvoke(messages)
+    
+    logger.info("[SYNTHESIZE NODE] Final analysis complete")
+    
+    return {
+        "messages": messages + [final_response],
+        "next_action": "end"
+    }
 
 
 # ---------------------------------------------------------------------------
-# Routing
+# Routing (unchanged)
 # ---------------------------------------------------------------------------
-
 
 def _after_reason(state: AgentState) -> Literal["execute", "synthesize"]:
-    last_msg = state["messages"][-1]
-    if isinstance(last_msg, AIMessage) and getattr(last_msg, "tool_calls", None):
+    """Route after reasoning: execute tools or synthesize if no tools needed"""
+    last_message = state["messages"][-1]
+    if hasattr(last_message, "tool_calls") and last_message.tool_calls:
+        logger.info(f"[ROUTER] Routing to EXECUTE ({len(last_message.tool_calls)} tool calls)")
         return "execute"
+    logger.info("[ROUTER] No tools to execute, routing to SYNTHESIZE")
     return "synthesize"
 
 
 # ---------------------------------------------------------------------------
-# Build the graph (compiled once, reused for every request)
+# Build graph (unchanged structure)
 # ---------------------------------------------------------------------------
 
-
 def build_graph():
-    g = StateGraph(AgentState)
-
-    g.add_node("reason", reason_node)
-    g.add_node("execute", execute_node)
-    g.add_node("synthesize", synthesize_node)
-
-    g.set_entry_point("reason")
-    g.add_conditional_edges("reason", _after_reason)
-    g.add_edge("execute", "reason")
-    g.add_edge("synthesize", END)
-
-    return g.compile()
+    """Build the LangGraph workflow"""
+    graph = StateGraph(AgentState)
+    
+    # Add nodes
+    graph.add_node("reason", reason_node)
+    graph.add_node("execute", execute_node)
+    graph.add_node("synthesize", synthesize_node)
+    
+    # Set entry point
+    graph.set_entry_point("reason")
+    
+    # Add edges
+    graph.add_conditional_edges(
+        "reason",
+        _after_reason,
+        {"execute": "execute", "synthesize": "synthesize"}
+    )
+    graph.add_edge("execute", "reason")  # Loop back for multi-step reasoning
+    graph.add_edge("synthesize", END)
+    
+    return graph.compile()
 
 
 _graph = build_graph()
 
-
 # ---------------------------------------------------------------------------
 # Redis chat history helper
 # ---------------------------------------------------------------------------
-
 
 def get_session_history(session_id: str):
     """Return a ``RedisChatMessageHistory`` instance for *session_id*.
@@ -176,7 +281,6 @@ def get_session_history(session_id: str):
 # ---------------------------------------------------------------------------
 # Public entry point
 # ---------------------------------------------------------------------------
-
 
 async def run_agent(
     query: str,
@@ -274,7 +378,6 @@ async def run_agent(
 # ---------------------------------------------------------------------------
 # Retrieve full chat history (for GET /api/chat/history)
 # ---------------------------------------------------------------------------
-
 
 def get_chat_history(session_id: str) -> List[Dict[str, str]]:
     store = get_session_history(session_id)

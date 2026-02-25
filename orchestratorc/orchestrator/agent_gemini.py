@@ -245,3 +245,29 @@ class GeminiPlannerAgent:
             "prompt": prompt,
             "timestamp": datetime.now().isoformat()
         }
+
+    async def create_plan(self, case_snippet: str, user_prompt: str = None):
+        # VALIDATION: Prevent empty contents error
+        if not case_snippet or case_snippet.strip() == "":
+            raise ValueError("Case snippet cannot be empty")
+        
+        if not user_prompt:
+            user_prompt = "Analyze this case comprehensively"
+        
+        # BUILD PROPER REQUEST
+        prompt = f"""
+                    You are a legal AI assistant for Sri Lankan law.
+
+                    User Request: {user_prompt}
+
+                    Case Document:
+                    {case_snippet}
+
+                    Create a detailed legal analysis plan...
+                    """
+        
+        # SEND TO GEMINI (ensure contents is properly structured)
+        response = self.model.generate_content([
+            {"role": "user", "parts": [{"text": prompt}]}
+        ])
+        return response

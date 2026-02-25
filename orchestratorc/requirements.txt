@@ -5,18 +5,25 @@ python-dotenv==1.0.0
 httpx==0.25.2
 python-multipart==0.0.6
 
-# Google Gemini (direct SDK – used by agent_gemini.py & tools fallback)
-google-generativeai>=0.3.0
+# Pre-built PyYAML for Python 3.13
+pyyaml==6.0.2
 
-# LangChain ecosystem
-langchain>=0.3.27
-langchain-google-genai>=2.1.8
-langchain-core>=0.3.72
-langchain-community>=0.3.0
-langchain-text-splitters>=0.3.9
+# Google Gemini (exact version to avoid conflicts)
+google-generativeai==0.7.2
+google-ai-generativelanguage==0.6.6
 
-# LangGraph (stateful agent workflow)
-langgraph>=0.2.0
+# LangChain (exact versions)
+langchain==0.3.27
+langchain-core==0.3.83
+langchain-community==0.3.0
+langchain-text-splitters==0.3.11
 
-# Redis (chat memory)
-redis>=5.0.0
+# LangChain Google (compatible with 0.7.2)
+langchain-google-genai==2.1.8
+
+# LangGraph
+langgraph==1.0.9
+langgraph-checkpoint==4.0.0
+
+# Redis
+redis==7.2.1
