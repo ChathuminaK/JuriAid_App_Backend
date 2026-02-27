@@ -1,5 +1,5 @@
 import re
-from app.config import COURT_LEVELS
+
 
 
 def extract_year(text: str):
@@ -8,11 +8,16 @@ def extract_year(text: str):
     return int(match.group()) if match else None
 
 
-def extract_court(text: str):
-    for court in COURT_LEVELS.keys():
-        if court.lower() in text.lower():
-            return court
-    return None
+def extract_case_name(text: str):
+    lines = text.split("\n")
+
+    # Check first 15 lines
+    for line in lines[:15]:
+        if " v. " in line.lower() or " vs " in line.lower():
+            return line.strip()
+
+    # fallback if not found
+    return lines[0][:150]
 
 
 def extract_legal_issues(roles: dict):
@@ -23,3 +28,5 @@ def extract_legal_issues(roles: dict):
         if len(words) > 2:
             issues.append(" ".join(words[:3]))
     return list(set(issues))[:5]
+
+    
