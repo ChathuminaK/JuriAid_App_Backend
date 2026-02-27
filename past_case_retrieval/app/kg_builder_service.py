@@ -1,28 +1,33 @@
 from app.neo4j_driver import db
 
 
-def store_case(case_id, roles, embeddings, issues, summary=None):
-    """
-    Store case embeddings and legal issues.
-    """
+def store_case(case_id, case_name, roles, embeddings, issues,
+               summary=None, complaint=None, defense=None):
 
     query = """
     MERGE (c:Case {case_id:$case_id})
-    SET c.facts_embedding=$facts_embedding,
+    SET c.case_name=$case_name,
+        c.facts_embedding=$facts_embedding,
         c.issues_embedding=$issues_embedding,
         c.arguments_embedding=$arguments_embedding,
-        c.summary=$summary
+        c.decisions_embedding=$decisions_embedding,
+        c.summary=$summary,
+        c.complaint=$complaint,
+        c.defense=$defense
     """
 
     db.query(query, {
-        "case_id": case_id,
-        "facts_embedding": embeddings["facts"],
-        "issues_embedding": embeddings["issues"],
-        "arguments_embedding": embeddings["arguments"],
-        "summary": summary
-    })
+    "case_id": case_id,
+    "case_name": case_name,
+    "facts_embedding": embeddings["facts"],
+    "issues_embedding": embeddings["issues"],
+    "arguments_embedding": embeddings["arguments"],
+    "decisions_embedding": embeddings["decisions"], 
+    "summary": summary,
+    "complaint": complaint,
+    "defense": defense
+})
 
-    # Create LegalIssue nodes
     for issue in issues:
         db.query("""
         MERGE (i:LegalIssue {name:$name})
