@@ -2,14 +2,17 @@ from fastapi import FastAPI, Query, HTTPException
 from pydantic import BaseModel, Field
 from typing import Optional
 import re
-from datetime import date
 from datetime import date as _date
 import os
 
 from app.hybrid_search import HybridSearchEngine, clean_query, today_str
 from app.kg_client import KGClient
+from app.case_api import router as case_router
 
 app = FastAPI(title="LawStatKG API", version="1.0.0")
+
+# ✅ Register the case upload routes
+app.include_router(case_router)
 
 engine = HybridSearchEngine()
 kg: Optional[KGClient] = None
@@ -19,6 +22,7 @@ DATE_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
 
 def clean_param(x: str) -> str:
     return (x or "").replace("\n", " ").replace("\r", " ").strip()
+
 
 class SearchRequest(BaseModel):
     query: str = Field(..., min_length=1)
@@ -35,7 +39,6 @@ class SearchRequest(BaseModel):
 def startup():
     global kg
     kg = KGClient()
-    # Load search indexes once at server start
     allow_build = os.getenv("ALLOW_BUILD_ON_STARTUP", "false").lower() == "true"
     engine.load(allow_build=allow_build)
 
@@ -88,7 +91,6 @@ def statute(act_id: str, date: str = Query("today")):
     return kg.get_statute_as_of(act_id=act_id, as_of_date=as_of)
 
 
-# ✅ Timeline endpoint (strips newline, spaces)
 @app.get("/timeline/{act_id}/{section_no}")
 def timeline(act_id: str, section_no: str):
     if not kg:
@@ -99,17 +101,16 @@ def timeline(act_id: str, section_no: str):
 
     return kg.get_section_timeline(act_id=act_id, section_no=section_no)
 
-# ✅ Before/after endpoint using "after version id"
+
 @app.get("/timeline/change/{after_version_id}")
 def timeline_change(after_version_id: str):
     if not kg:
         raise HTTPException(status_code=500, detail="KGClient not initialized")
 
-    after_version_id = (after_version_id or "").strip()
+    after_version_id = clean_param(after_version_id)
     return kg.get_change_detail(after_version_id=after_version_id)
 
 
-# ✅ NEW: Amendment endpoint using amend_id directly
 @app.get("/amendments")
 def amendments(date: str = Query("today")):
     if not kg:
