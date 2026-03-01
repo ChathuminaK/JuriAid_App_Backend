@@ -1,321 +1,158 @@
-from __future__ import annotations
+"""
+JuriAid Orchestrator API
+========================
+The brain of the JuriAid legal AI system.
 
-import os
-from datetime import datetime
-from typing import Optional
+Endpoints:
+  GET  /health         → Health check
+  POST /api/analyze    → Full case analysis pipeline
+  POST /api/cases/save → Save case for future reference
+"""
 
-import httpx
-from fastapi import Depends, FastAPI, File, Form, HTTPException, Request, UploadFile
+import logging
+from contextlib import asynccontextmanager
+from fastapi import FastAPI, UploadFile, File, Form, Depends, HTTPException, status
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
-from pydantic import BaseModel
 
-from config import settings
-from orchestrator.core import (
-    OUTPUTS_DIR,
-    UPLOADS_DIR,
-    analyze_case_content,
-    generate_legal_summary,
-    process_single_file,
-    read_input_file,
+from config import get_settings
+from auth_middleware import verify_token
+from orchestrator.pipeline import CaseAnalysisPipeline
+from orchestrator.schemas import CaseAnalysisResponse, CaseSaveResponse
+from orchestrator.service_clients import past_case_client, ServiceError
+
+settings = get_settings()
+
+logging.basicConfig(
+    level=logging.DEBUG if settings.DEBUG else logging.INFO,
+    format="%(asctime)s | %(name)-30s | %(levelname)-7s | %(message)s",
 )
-from orchestrator.agent_gemini import GeminiPlannerAgent
-from orchestrator.agent_langchain import run_agent, get_chat_history
-from auth_middleware import verify_user_token
+logger = logging.getLogger(__name__)
 
-# ---------------------------------------------------------------------------
-# Initialise agents
-# ---------------------------------------------------------------------------
-planner_agent = GeminiPlannerAgent(
-    kb_path=os.path.join(OUTPUTS_DIR, "knowledge_base.json")
-)
 
-os.makedirs(UPLOADS_DIR, exist_ok=True)
-os.makedirs(OUTPUTS_DIR, exist_ok=True)
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    logger.info("🚀 JuriAid Orchestrator starting...")
+    logger.info(f"   PastCase:    {settings.PAST_CASE_SERVICE_URL}")
+    logger.info(f"   LawStatKG:   {settings.LAWSTATKG_SERVICE_URL}")
+    logger.info(f"   QuestionGen: {settings.QUESTIONGEN_SERVICE_URL}")
+    logger.info("✅ Orchestrator ready!")
+    yield
+    logger.info("👋 Shutting down")
 
-# ---------------------------------------------------------------------------
-# FastAPI app
-# ---------------------------------------------------------------------------
+
 app = FastAPI(
-    title="JuriAid Orchestrator API",
+    title="JuriAid Orchestrator",
+    description="Agentic AI Framework for Sri Lankan Legal Case Analysis",
     version="2.0.0",
-    description="Agentic AI legal-case analysis orchestrator for Sri Lankan law.",
+    lifespan=lifespan,
 )
 
-# ── CORS ──
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=settings.CORS_ORIGINS,
+    allow_origins=["*"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-
-# ---------------------------------------------------------------------------
-# Pydantic request schemas
-# ---------------------------------------------------------------------------
-class ChatRequest(BaseModel):
-    query: str
-    session_id: str
+pipeline = CaseAnalysisPipeline()
 
 
-class LawSearchRequest(BaseModel):
-    query: str
-    jurisdiction: Optional[str] = "Sri Lanka"
-    as_of_date: Optional[str] = None
-    top_k: int = 5
+# ═══════════════════════════════════════════════════════════
+#  GET /health
+# ═══════════════════════════════════════════════════════════
 
-
-# ---------------------------------------------------------------------------
-# Health check
-# ---------------------------------------------------------------------------
-@app.get("/")
+@app.get("/health")
 async def health():
-    """Return service status and a quick liveness probe for each dependency."""
-
-    async def _ping(url: str) -> str:
-        try:
-            async with httpx.AsyncClient(timeout=3.0) as c:
-                r = await c.get(url)
-                return "ok" if r.status_code < 500 else "degraded"
-        except Exception:
-            return "unreachable"
-
-    return {
-        "status": "ok",
-        "time": datetime.now().isoformat(),
-        "agent": "langgraph-gemini-2.5-flash",
-        "services": {
-            "auth": await _ping(f"{settings.AUTH_SERVICE_URL}/"),
-            "lawstatkg": await _ping(f"{settings.LAWSTATKG_SERVICE_URL}/docs"),
-            "past_case": await _ping(f"{settings.PAST_CASE_SERVICE_URL}/health"),
-            "questiongen": await _ping(f"{settings.QUESTIONGEN_SERVICE_URL}/docs"),
-        },
-    }
+    return {"status": "healthy", "service": "JuriAid Orchestrator", "version": "2.0.0"}
 
 
-# =========================================================================
-# PRIMARY  –  /api/chat   (LangGraph agent)
-# =========================================================================
-@app.post("/api/chat")
-async def chat(
-    query: str = Form(...),
-    session_id: str = Form(...),
-    file: Optional[UploadFile] = File(None),
-    user: dict = Depends(verify_user_token),
+# ═══════════════════════════════════════════════════════════
+#  POST /api/analyze - Full Case Analysis
+# ═══════════════════════════════════════════════════════════
+
+@app.post("/api/analyze", response_model=CaseAnalysisResponse)
+async def analyze_case(
+    file: UploadFile = File(..., description="Legal case PDF"),
+    prompt: str = Form(default="Analyze this case"),
+    save_for_reference: bool = Form(default=False),
+    user: dict = Depends(verify_token),
 ):
-    """Multi-turn conversational endpoint powered by the LangGraph agent.
-
-    Accepts an optional file (PDF/TXT). The agent decides which
-    micro-services to call, then returns an executive summary.
     """
-    case_text: str | None = None
+    Upload a Sri Lankan legal case PDF → get full AI analysis.
 
-    if file and file.filename:
-        if not file.filename.lower().endswith((".pdf", ".txt")):
-            raise HTTPException(400, "Only PDF or TXT files supported.")
-        data = await file.read()
-        if not data:
-            raise HTTPException(400, "Empty file.")
-        ts_name = f"{datetime.now():%Y%m%d_%H%M%S}_{file.filename}"
-        dest = os.path.join(UPLOADS_DIR, ts_name)
-        with open(dest, "wb") as fh:
-            fh.write(data)
-        case_text = read_input_file(dest)
+    Pipeline: PDF extract → PastCase search → LawStatKG search →
+              Gemini summary → QuestionGen → Agent synthesis → Response
+    """
 
-    result = await run_agent(query=query, session_id=session_id, case_text=case_text)
-    result["user_id"] = user.get("user_id")
-    result["email"] = user.get("email")
-    return JSONResponse(result)
+    # Validate
+    if not file.filename or not file.filename.lower().endswith(".pdf"):
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Only PDF files accepted")
 
+    file_bytes = await file.read()
 
-# Also accept a pure-JSON body (no file)
-@app.post("/api/chat/json")
-async def chat_json(
-    body: ChatRequest,
-    user: dict = Depends(verify_user_token),
-):
-    """JSON-only variant of /api/chat (no file upload)."""
-    result = await run_agent(query=body.query, session_id=body.session_id)
-    result["user_id"] = user.get("user_id")
-    return JSONResponse(result)
+    if not file_bytes:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "File is empty")
 
+    size_mb = len(file_bytes) / (1024 * 1024)
+    if size_mb > settings.MAX_FILE_SIZE_MB:
+        raise HTTPException(
+            status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+            f"File too large ({size_mb:.1f}MB). Max: {settings.MAX_FILE_SIZE_MB}MB",
+        )
 
-# =========================================================================
-# Chat history
-# =========================================================================
-@app.get("/api/chat/history/{session_id}")
-async def chat_history(session_id: str, user: dict = Depends(verify_user_token)):
-    """Return the full conversation history for a session from Redis."""
-    return {"session_id": session_id, "messages": get_chat_history(session_id)}
+    logger.info(f"📥 Analyze | user={user.get('sub')} | file={file.filename} | {size_mb:.2f}MB")
 
-
-# =========================================================================
-# Direct proxy  –  Law search  (no agent reasoning)
-# =========================================================================
-@app.post("/api/search/laws")
-async def search_laws(body: LawSearchRequest, user: dict = Depends(verify_user_token)):
-    """Proxy to LawStatKG /Lawsearch – no agent reasoning, direct pass-through."""
-    payload = {
-        "query": body.query,
-        "jurisdiction": body.jurisdiction,
-        "as_of_date": body.as_of_date or datetime.now().strftime("%Y-%m-%d"),
-        "top_k": body.top_k,
-    }
     try:
-        async with httpx.AsyncClient(timeout=30.0) as c:
-            r = await c.post(f"{settings.LAWSTATKG_SERVICE_URL}/Lawsearch", json=payload)
-            r.raise_for_status()
-            return r.json()
-    except Exception as exc:
-        raise HTTPException(502, f"LawStatKG service error: {exc}")
+        return await pipeline.analyze(
+            file_bytes=file_bytes,
+            filename=file.filename,
+            user_prompt=prompt,
+            save_for_reference=save_for_reference,
+            user_id=user.get("sub"),
+        )
+    except ValueError as e:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, str(e))
+    except Exception as e:
+        logger.error(f"❌ Pipeline failed: {e}", exc_info=True)
+        raise HTTPException(status.HTTP_500_INTERNAL_SERVER_ERROR, f"Analysis failed: {e}")
 
 
-# =========================================================================
-# Direct proxy  –  Past-case search  (no agent reasoning)
-# =========================================================================
-@app.post("/api/search/cases")
-async def search_cases(
-    file: UploadFile = File(...),
-    topk: int = Form(5),
-    user: dict = Depends(verify_user_token),
+# ═══════════════════════════════════════════════════════════
+#  POST /api/cases/save - Save Case for Future Reference
+# ═══════════════════════════════════════════════════════════
+
+@app.post("/api/cases/save", response_model=CaseSaveResponse)
+async def save_case(
+    file: UploadFile = File(..., description="Legal case PDF"),
+    user: dict = Depends(verify_token),
 ):
-    """Proxy to Past-Case Retrieval – upload & search."""
-    data = await file.read()
-    if not data:
-        raise HTTPException(400, "Empty file.")
+    """
+    Save a case PDF to the Knowledge Graph for future reference.
+    Calls PastCase /search which auto-indexes the case in Neo4j.
+    The case will appear in similarity searches for future analyses.
+    """
+
+    if not file.filename or not file.filename.lower().endswith(".pdf"):
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Only PDF files accepted")
+
+    file_bytes = await file.read()
+    if not file_bytes:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "File is empty")
+
+    logger.info(f"💾 Save case | user={user.get('sub')} | file={file.filename}")
+
     try:
-        async with httpx.AsyncClient(timeout=60.0) as c:
-            r = await c.post(
-                f"{settings.PAST_CASE_SERVICE_URL}/upload_and_search",
-                files={"file": (file.filename, data, file.content_type or "application/pdf")},
-                params={"topk": topk},
-            )
-            r.raise_for_status()
-            return r.json()
-    except Exception as exc:
-        raise HTTPException(502, f"Past-Case service error: {exc}")
+        # Call /search which auto-indexes to Neo4j
+        result = await past_case_client.search_similar(file_bytes, file.filename)
 
-
-# =========================================================================
-# Legacy endpoints  (kept for backwards compatibility)
-# =========================================================================
-@app.post("/api/upload-case")
-async def upload_case(
-    file: UploadFile = File(...),
-    user: dict = Depends(verify_user_token),
-):
-    if not file or not getattr(file, "filename", "").strip():
-        raise HTTPException(422, "Missing file upload.")
-    if not file.filename.lower().endswith((".pdf", ".txt")):
-        raise HTTPException(400, "Only PDF or TXT files supported.")
-    data = await file.read()
-    if not data:
-        raise HTTPException(400, "Empty file content.")
-
-    ts_name = f"{datetime.now():%Y%m%d_%H%M%S}_{file.filename}"
-    dest = os.path.join(UPLOADS_DIR, ts_name)
-    with open(dest, "wb") as fh:
-        fh.write(data)
-
-    result = process_single_file(dest)
-    if not result.get("success"):
-        raise HTTPException(500, result.get("error", "Processing failed"))
-    result["user_id"] = user["user_id"]
-    result["subscription_tier"] = user.get("subscription_tier")
-    result["email"] = user.get("email")
-    return JSONResponse(result)
-
-
-@app.post("/api/upload-case-with-prompt")
-async def upload_case_with_prompt(
-    file: UploadFile = File(...),
-    prompt: str = Form(...),
-    user: dict = Depends(verify_user_token),
-):
-    """Upload + prompt → runs the **LangGraph agent** (fixed: prompt is now used)."""
-    if not file.filename.lower().endswith((".pdf", ".txt")):
-        raise HTTPException(400, "Only PDF or TXT files supported.")
-    data = await file.read()
-    if not data:
-        raise HTTPException(400, "Empty file.")
-
-    ts_name = f"{datetime.now():%Y%m%d_%H%M%S}_{file.filename}"
-    dest = os.path.join(UPLOADS_DIR, ts_name)
-    with open(dest, "wb") as fh:
-        fh.write(data)
-
-    case_text = read_input_file(dest)
-    session_id = f"upload_{datetime.now():%Y%m%d%H%M%S}_{user.get('user_id', 'anon')}"
-    result = await run_agent(query=prompt, session_id=session_id, case_text=case_text)
-    result["user_id"] = user["user_id"]
-    return JSONResponse(result)
-
-
-@app.post("/api/agent/plan-run")
-async def plan_and_execute(request: dict, user_id: str = Depends(get_current_user_id)):
-    session_id = request.get("session_id", f"session_{int(time.time())}")
-    case_snippet = request.get("case_snippet", "")
-    user_prompt = request.get("prompt", "Analyze this case")
-    
-    # RETRIEVE CASE HISTORY
-    existing_case = memory_manager.get_case_context(session_id)
-    
-    # ENHANCE PROMPT WITH HISTORY
-    if existing_case:
-        context_prompt = f"""
-Previous Analysis Summary:
-{existing_case.get('analysis_history', [])}
-
-New User Request: {user_prompt}
-
-Based on previous analysis, focus on what's new or updated.
-"""
-        user_prompt = context_prompt
-    
-    # CREATE PLAN
-    plan_result = await agent.create_plan(case_snippet, user_prompt)
-    
-    # SAVE RESULTS
-    memory_manager.update_case_history(session_id, plan_result)
-    memory_manager.save_conversation_turn(session_id, user_prompt, plan_result)
-    
-    return plan_result
-
-
-@app.post("/api/analyze-text")
-async def analyze_text(request: Request):
-    """Public: quick keyword-based analysis (no auth)."""
-    body = await request.json()
-    text = (body.get("text") or "").strip()
-    if not text:
-        raise HTTPException(400, "Text cannot be empty.")
-    analysis = analyze_case_content(text)
-    summary = generate_legal_summary(text, analysis)
-    return {
-        "success": True,
-        "case_type": analysis["case_type"],
-        "length": analysis["length"],
-        "preview": text[:500] + ("..." if len(text) > 500 else ""),
-        "summary": summary,
-        "timestamp": datetime.now().isoformat(),
-    }
-
-
-# ---------------------------------------------------------------------------
-# Global exception handlers
-# ---------------------------------------------------------------------------
-@app.exception_handler(HTTPException)
-async def http_exc_handler(_, exc: HTTPException):
-    return JSONResponse(
-        status_code=exc.status_code,
-        content={"success": False, "detail": exc.detail},
-    )
-
-
-@app.exception_handler(Exception)
-async def unhandled(_, exc: Exception):
-    return JSONResponse(
-        status_code=500, content={"success": False, "detail": str(exc)}
-    )
+        return CaseSaveResponse(
+            saved=True,
+            case_id=result.get("new_case_id"),
+            message="Case saved and indexed for future reference",
+        )
+    except ServiceError as e:
+        raise HTTPException(e.status_code, e.detail)
+    except Exception as e:
+        logger.error(f"❌ Save failed: {e}", exc_info=True)
+        raise HTTPException(status.HTTP_500_INTERNAL_SERVER_ERROR, f"Save failed: {e}")
