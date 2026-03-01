@@ -31,7 +31,7 @@ $services = @(
         Name = "PastCase Retrieval"
         Port = 8002
         Path = Join-Path $ROOT_DIR "past_case_retrieval"
-        Command = "uvicorn app:app --reload --port 8002"
+        Command = "uvicorn app.main:app --reload --port 8002"
         Color = "Yellow"
     },
     @{
