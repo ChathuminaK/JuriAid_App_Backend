@@ -28,15 +28,15 @@ logging.basicConfig(
     format="%(asctime)s | %(levelname)-7s | %(name)s | %(message)s",
     handlers=[logging.StreamHandler(sys.stdout)],
 )
-logger = logging.getLogger(__name__)
+logger = logging.getLogger("orchestrator_agent")
 
 # ---------- App ----------
 settings = get_settings()
 
 app = FastAPI(
     title="JuriAid Orchestrator",
-    description="Agentic AI Framework - Central coordinator for JuriAid legal analysis system",
-    version="2.0.0",
+    description="Agentic AI Framework - Central multi-agent coordinator for JuriAid legal analysis",
+    version="2.3.0",
 )
 
 app.add_middleware(
@@ -101,26 +101,31 @@ async def analyze_case(
     user: dict = Depends(verify_token),
 ):
     """
-    POST /api/analyze - Main analysis pipeline.
+    POST /api/analyze — Main multi-agent analysis pipeline.
 
-    Validates the PDF is a Sri Lankan divorce/matrimonial case before processing.
-    The LLM dynamically detects user intent from the prompt.
+    Agent Flow:
+      ValidationAgent → OrchestratorAgent → IntentDetectionAgent → MemoryAgent →
+      [CaseRetrievalAgent || LawRetrievalAgent] → SummaryAgent →
+      QuestionGenAgent → SynthesisAgent → MemoryAgent
     """
-    logger.info(f"Analyze request from user {user.get('sub')} | file={file.filename}")
+    user_id = user.get("sub", 0)
+    logger.info(f"[OrchestratorAgent] Received analysis request | user={user_id} | file={file.filename}")
 
     try:
-        # Step 1: Validate PDF file (size, format)
+        # Step 1: Validate PDF file
         pdf_bytes = await _validate_pdf(file)
+        logger.info(f"[OrchestratorAgent] PDF validated ({len(pdf_bytes) / 1024:.1f} KB)")
 
-        # Step 2: Quick text extraction for validation
+        # Step 2: Extract text
+        logger.info(f"[OrchestratorAgent] Extracting text from PDF")
         case_text = extract_text_from_pdf(pdf_bytes)
 
-        # Step 3: Validate this is a Sri Lankan divorce case
+        # Step 3: ValidationAgent — Ensure it's a Sri Lankan divorce case
+        logger.info(f"[ValidationAgent] Validating case type (Sri Lankan divorce only)")
         is_valid, validation_details = validate_divorce_case(case_text)
         if not is_valid:
             logger.warning(
-                f"Case validation failed for '{file.filename}': "
-                f"{validation_details.get('reason')}"
+                f"[ValidationAgent] ✗ Rejected: {validation_details.get('reason')}"
             )
             raise HTTPException(
                 status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
@@ -131,13 +136,17 @@ async def analyze_case(
                     "hint": "Please upload a Sri Lankan divorce plaint, answer, or judgment PDF.",
                 },
             )
+        logger.info(
+            f"[ValidationAgent] ✓ Passed ({validation_details.get('matched_keywords', 0)} keywords, "
+            f"{validation_details.get('strong_matches', 0)} strong indicators)"
+        )
 
-        # Step 4: Run full analysis pipeline
+        # Step 4: Run multi-agent pipeline
         result = await run_analysis_pipeline(
             pdf_bytes=pdf_bytes,
             filename=file.filename or "upload.pdf",
             user_prompt=prompt,
-            user_id=user.get("sub", 0),
+            user_id=user_id,
             pre_extracted_text=case_text,
         )
 
@@ -146,7 +155,7 @@ async def analyze_case(
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"Pipeline failed: {e}", exc_info=True)
+        logger.error(f"[OrchestratorAgent] ✗ Pipeline failed: {e}", exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Analysis pipeline failed: {str(e)}",
@@ -158,7 +167,7 @@ async def save_case(
     file: UploadFile = File(..., description="Legal case PDF to save for future reference"),
     user: dict = Depends(verify_token),
 ):
-    logger.info(f"Save case request from user {user.get('sub')} | file={file.filename}")
+    logger.info(f"[OrchestratorAgent] Save case request | user={user.get('sub')} | file={file.filename}")
 
     try:
         pdf_bytes = await _validate_pdf(file)
@@ -167,6 +176,7 @@ async def save_case(
 
         case_id = result.get("case_id", "")
         if case_id:
+            logger.info(f"[OrchestratorAgent] ✓ Case saved: {case_id[:8]}...")
             return CaseSaveResponse(saved=True, case_id=case_id)
         else:
             raise HTTPException(
@@ -177,7 +187,7 @@ async def save_case(
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"Case save failed: {e}", exc_info=True)
+        logger.error(f"[OrchestratorAgent] ✗ Case save failed: {e}", exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail="Service unreachable",

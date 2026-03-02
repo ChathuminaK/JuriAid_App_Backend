@@ -1,92 +1,202 @@
+"""
+JuriAid Hybrid Memory Manager
+------------------------------
+Short-term memory: ConversationBufferWindow (last N messages, in-process)
+Long-term memory : Redis (persistent across sessions, 7-day TTL)
+
+Reference: Proposal Section - "Implement a memory system for ongoing conversations"
+  - ConversationBufferWindowMemory for short-term context [6], [10]
+  - Redis-backed ConversationBufferMemory for long-term case continuity [10], [11]
+"""
+
 import json
 import logging
+from collections import defaultdict
 from config import get_settings
 
-logger = logging.getLogger(__name__)
+logger = logging.getLogger("memory_agent")
 settings = get_settings()
 
-# In-memory fallback store: session_id -> list of messages
-_memory_store: dict[str, list[dict]] = {}
+# ============================================================
+# SHORT-TERM MEMORY: ConversationBufferWindow (in-process)
+# Keeps last N messages per session for immediate LLM context
+# ============================================================
 
-# Redis client (lazy init)
-_redis = None
+_short_term_store: dict[str, list[dict]] = defaultdict(list)
+
+
+def _save_short_term(session_id: str, role: str, content: str) -> None:
+    """Save message to short-term ConversationBuffer (windowed)."""
+    _short_term_store[session_id].append({"role": role, "content": content})
+
+    # Keep only last N messages (sliding window)
+    window = settings.SHORT_TERM_WINDOW
+    if len(_short_term_store[session_id]) > window:
+        _short_term_store[session_id] = _short_term_store[session_id][-window:]
+
+
+def _get_short_term(session_id: str) -> list[dict]:
+    """Retrieve short-term ConversationBuffer messages."""
+    return list(_short_term_store.get(session_id, []))
+
+
+# ============================================================
+# LONG-TERM MEMORY: Redis (persistent, survives restarts)
+# Stores full conversation history for case continuity
+# ============================================================
+
+_redis_client = None
 _redis_checked = False
 
 
 def _get_redis():
-    """Try to connect to Redis once. Returns client or None."""
-    global _redis, _redis_checked
+    """Lazy-init Redis connection. Returns client or None."""
+    global _redis_client, _redis_checked
 
     if _redis_checked:
-        return _redis
+        return _redis_client
 
     _redis_checked = True
 
     if not settings.REDIS_ENABLED:
-        logger.info("Redis disabled - using in-memory conversation store")
+        logger.info("[MemoryAgent] Long-term memory: Redis DISABLED — using in-memory fallback")
         return None
 
     try:
         import redis as redis_lib
         client = redis_lib.from_url(settings.REDIS_URL, decode_responses=True)
         client.ping()
-        logger.info("Redis connected for long-term memory")
-        _redis = client
-        return _redis
+        logger.info("[MemoryAgent] Long-term memory: Redis CONNECTED ✅")
+        _redis_client = client
+        return _redis_client
+    except ImportError:
+        logger.warning("[MemoryAgent] Redis package not installed — pip install redis")
+        return None
     except Exception as e:
-        logger.warning(f"Redis unavailable, using in-memory fallback: {e}")
+        logger.warning(f"[MemoryAgent] Redis unavailable — using in-memory fallback: {e}")
         return None
 
 
-def save_conversation(session_id: str, role: str, content: str) -> None:
-    """Save a message to conversation history (Redis or in-memory)."""
-    message = {"role": role, "content": content[:2000]}
-    redis_client = _get_redis()
+# In-memory fallback for long-term when Redis is unavailable
+_long_term_fallback: dict[str, list[dict]] = defaultdict(list)
 
-    if redis_client:
+
+def _save_long_term(session_id: str, role: str, content: str) -> None:
+    """Save message to long-term memory (Redis or in-memory fallback)."""
+    message = {"role": role, "content": content[:2000]}
+    redis = _get_redis()
+
+    if redis:
         try:
             key = f"juriaid:memory:{session_id}"
-            redis_client.rpush(key, json.dumps(message))
-            redis_client.expire(key, 86400 * 7)  # 7 day TTL
+            redis.rpush(key, json.dumps(message))
+            redis.expire(key, 86400 * settings.REDIS_TTL_DAYS)
             return
         except Exception as e:
-            logger.warning(f"Redis save failed, using fallback: {e}")
+            logger.warning(f"[MemoryAgent] Redis write failed, using fallback: {e}")
 
-    # In-memory fallback
-    if session_id not in _memory_store:
-        _memory_store[session_id] = []
-    _memory_store[session_id].append(message)
-
-    # Keep max 50 messages per session
-    if len(_memory_store[session_id]) > 50:
-        _memory_store[session_id] = _memory_store[session_id][-50:]
+    # Fallback: in-memory long-term
+    _long_term_fallback[session_id].append(message)
+    max_msgs = settings.LONG_TERM_MAX_MESSAGES
+    if len(_long_term_fallback[session_id]) > max_msgs:
+        _long_term_fallback[session_id] = _long_term_fallback[session_id][-max_msgs:]
 
 
-def get_conversation_history(session_id: str, last_n: int = 10) -> list[dict]:
-    """Retrieve recent conversation history."""
-    redis_client = _get_redis()
+def _get_long_term(session_id: str, last_n: int = 20) -> list[dict]:
+    """Retrieve long-term memory (Redis or in-memory fallback)."""
+    redis = _get_redis()
 
-    if redis_client:
+    if redis:
         try:
             key = f"juriaid:memory:{session_id}"
-            messages = redis_client.lrange(key, -last_n, -1)
+            messages = redis.lrange(key, -last_n, -1)
             return [json.loads(m) for m in messages]
         except Exception as e:
-            logger.warning(f"Redis read failed, using fallback: {e}")
+            logger.warning(f"[MemoryAgent] Redis read failed, using fallback: {e}")
 
-    # In-memory fallback
-    history = _memory_store.get(session_id, [])
+    # Fallback
+    history = _long_term_fallback.get(session_id, [])
     return history[-last_n:]
 
 
-def clear_conversation(session_id: str) -> None:
-    """Clear conversation history for a session."""
-    redis_client = _get_redis()
+# ============================================================
+# PUBLIC API — Used by pipeline.py
+# ============================================================
 
-    if redis_client:
+def save_conversation(session_id: str, role: str, content: str) -> None:
+    """
+    Save message to BOTH memory systems:
+    - Short-term ConversationBuffer (for immediate LLM context window)
+    - Long-term Redis/fallback (for case continuity across sessions)
+    """
+    if not session_id or not content:
+        return
+
+    _save_short_term(session_id, role, content)
+    _save_long_term(session_id, role, content)
+
+    logger.debug(
+        f"[MemoryAgent] Saved {role} message | session={session_id[:8]}... | "
+        f"short-term={len(_short_term_store.get(session_id, []))} msgs, "
+        f"long-term=persisted"
+    )
+
+
+def get_conversation_history(session_id: str) -> str:
+    """
+    Get conversation context for LLM.
+    Strategy: Use short-term buffer first (recent context).
+    If empty, fall back to long-term memory (returning user).
+    """
+    if not session_id:
+        return ""
+
+    # Try short-term first (current session)
+    short = _get_short_term(session_id)
+
+    # If no short-term, check long-term (returning user with history)
+    if not short:
+        long = _get_long_term(session_id, last_n=10)
+        if long:
+            logger.info(
+                f"[MemoryAgent] Restored {len(long)} messages from long-term memory "
+                f"for session {session_id[:8]}..."
+            )
+            # Populate short-term from long-term for this session
+            for msg in long:
+                _save_short_term(session_id, msg["role"], msg["content"])
+            short = _get_short_term(session_id)
+
+    if not short:
+        return ""
+
+    # Format for LLM
+    parts = []
+    for msg in short:
+        role = msg.get("role", "unknown").capitalize()
+        content = msg.get("content", "")
+        parts.append(f"{role}: {content}")
+
+    history = "\n".join(parts)
+    logger.info(
+        f"[MemoryAgent] Retrieved {len(short)} messages for LLM context | "
+        f"session={session_id[:8]}..."
+    )
+    return history
+
+
+def clear_conversation(session_id: str) -> None:
+    """Clear both short-term and long-term memory for a session."""
+    # Short-term
+    _short_term_store.pop(session_id, None)
+
+    # Long-term
+    redis = _get_redis()
+    if redis:
         try:
-            redis_client.delete(f"juriaid:memory:{session_id}")
+            redis.delete(f"juriaid:memory:{session_id}")
         except Exception:
             pass
+    _long_term_fallback.pop(session_id, None)
 
-    _memory_store.pop(session_id, None)
+    logger.info(f"[MemoryAgent] Cleared all memory for session {session_id[:8]}...")
