@@ -26,7 +26,7 @@ async def _request_with_retry(
     retries = retries if retries is not None else settings.MAX_RETRIES
     timeout = timeout or settings.SERVICE_TIMEOUT
 
-    for attempt in range(1, retries + 2):  # +2 because range is exclusive and first try isn't a retry
+    for attempt in range(1, retries + 2):
         try:
             async with httpx.AsyncClient(timeout=timeout) as client:
                 resp = await client.request(method, url, **kwargs)
@@ -39,7 +39,7 @@ async def _request_with_retry(
                 )
 
         except httpx.TimeoutException:
-            logger.warning(f"Attempt {attempt}: Timeout calling {url}")
+            logger.warning(f"Attempt {attempt}: Timeout ({timeout}s) calling {url}")
         except httpx.RequestError as e:
             logger.warning(f"Attempt {attempt}: Connection error for {url}: {e}")
 
@@ -48,7 +48,7 @@ async def _request_with_retry(
             logger.info(f"Retrying in {wait}s...")
             await asyncio.sleep(wait)
 
-    logger.error(f"All attempts failed for {url}")
+    logger.error(f"All {retries + 1} attempts failed for {url}")
     return None
 
 
@@ -119,16 +119,28 @@ async def get_applicable_laws(pdf_bytes: bytes, filename: str) -> dict:
 async def generate_questions(case_text: str, laws_text: str, cases_text: str) -> dict:
     """
     POST JSON to :8004/generate-questions → returns generated legal questions.
+    Uses QUESTIONGEN_TIMEOUT (600s default) since Ollama CPU inference is slow.
     Gracefully returns empty result on failure.
     """
     url = f"{settings.QUESTIONGEN_SERVICE_URL}/generate-questions"
     json_body = {
-        "case_text": case_text[:5000],  # Limit to prevent oversized payloads
+        "case_text": case_text[:5000],
         "law": laws_text[:3000],
         "cases": cases_text[:3000],
     }
 
-    resp = await _request_with_retry("POST", url, json=json_body, timeout=180)
+    # QuestionGen uses Ollama on CPU - needs much longer timeout
+    questiongen_timeout = settings.QUESTIONGEN_TIMEOUT
+
+    logger.info(f"Calling QuestionGen with timeout={questiongen_timeout}s (CPU inference)")
+
+    resp = await _request_with_retry(
+        "POST",
+        url,
+        json=json_body,
+        timeout=questiongen_timeout,
+        retries=1,  # Only 1 retry for QuestionGen (each attempt takes ~5 min)
+    )
 
     if resp and resp.status_code == 200:
         data = resp.json()

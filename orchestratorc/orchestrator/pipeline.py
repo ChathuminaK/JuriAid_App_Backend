@@ -36,48 +36,73 @@ logger = logging.getLogger(__name__)
 
 
 def _format_cases_text(cases_data: dict) -> str:
-    """Format similar cases into text for LLM context."""
+    """Format similar cases into readable text for LLM context."""
     cases = cases_data.get("similar_cases", [])
     if not cases:
         return "No similar past cases found."
 
     parts = []
-    for c in cases[:5]:  # Max 5
-        name = c.get("case_name", "Unknown")
-        complaint = c.get("complaint", "N/A")
-        defense = c.get("defense", "N/A")
+    for i, c in enumerate(cases[:5], 1):
+        name = _clean_case_name(c.get("case_name", ""), c.get("case_id", ""))
+        complaint = c.get("complaint", "N/A") or "N/A"
+        defense = c.get("defense", "N/A") or "N/A"
         score = c.get("score", 0)
-        parts.append(f"- {name} (similarity: {score:.2f}): Complaint: {complaint} | Defense: {defense}")
+        parts.append(
+            f"{i}. {name} (similarity: {score})\n"
+            f"   Complaint: {complaint}\n"
+            f"   Defense: {defense}"
+        )
 
     return "\n".join(parts)
 
 
 def _format_laws_text(laws_data: dict) -> str:
-    """Format applicable laws into text for LLM context."""
+    """Format applicable laws into readable text for LLM context."""
     laws = laws_data.get("applicable_laws", [])
     if not laws:
         return "No applicable laws retrieved."
 
     parts = []
-    for law in laws[:10]:  # Max 10
+    for law in laws[:10]:
         title = law.get("title", "Unknown")
         section = law.get("section", "")
         content = law.get("content", "")
-        parts.append(f"- {title} {section}: {content}")
+        score = law.get("relevance_score", 0)
+        parts.append(f"- {title} {section} (relevance: {score}): {content}")
 
     return "\n".join(parts)
 
 
+def _clean_case_name(name: str, case_id: str = "") -> str:
+    """
+    Clean case names that come as 'Page 1' or empty from PastCase service.
+    Falls back to a readable case ID reference.
+    """
+    name = (name or "").strip()
+
+    # Check if name is useless (Page X, empty, etc.)
+    if not name or name.lower().startswith("page") or len(name) < 5:
+        if case_id:
+            short_id = str(case_id)[:8]
+            return f"Case Ref: {short_id}"
+        return "Unnamed Case"
+
+    return name
+
+
 def _parse_similar_cases(cases_data: dict) -> list[SimilarCase]:
-    """Parse raw cases data into schema objects."""
+    """Parse raw cases data into schema objects with cleaned names."""
     result = []
     for c in cases_data.get("similar_cases", []):
+        case_id = str(c.get("case_id", ""))
+        raw_name = str(c.get("case_name", ""))
+
         result.append(SimilarCase(
-            case_id=str(c.get("case_id", "")),
-            case_name=str(c.get("case_name", "")),
+            case_id=case_id,
+            case_name=_clean_case_name(raw_name, case_id),
             score=float(c.get("score", 0)),
-            complaint=str(c.get("complaint", "")),
-            defense=str(c.get("defense", "")),
+            complaint=str(c.get("complaint", "") or ""),
+            defense=str(c.get("defense", "") or ""),
         ))
     return result
 
@@ -97,19 +122,23 @@ def _parse_relevant_laws(laws_data: dict) -> list[RelevantLaw]:
 
 
 def _parse_questions(questions_data: dict) -> list[GeneratedQuestion]:
-    """Parse raw questions string into schema objects."""
+    """Parse raw questions string into structured schema objects."""
     raw = questions_data.get("questions", "")
     if not raw:
         return []
 
     questions = []
-    for i, line in enumerate(raw.strip().split("\n"), start=1):
+    q_id = 0
+    for line in raw.strip().split("\n"):
         line = line.strip()
-        if line and len(line) > 3:
-            # Remove leading number/bullet
-            clean = line.lstrip("0123456789.-) ").strip()
-            if clean:
-                questions.append(GeneratedQuestion(question_id=i, question=clean))
+        if not line or len(line) < 10:
+            continue
+
+        # Remove leading number/bullet patterns like "1.", "1)", "- ", "* "
+        clean = line.lstrip("0123456789.-)*• ").strip()
+        if clean and len(clean) > 10:
+            q_id += 1
+            questions.append(GeneratedQuestion(question_id=q_id, question=clean))
 
     return questions
 
@@ -122,16 +151,17 @@ async def run_analysis_pipeline(
     session_id: Optional[str] = None,
 ) -> AnalysisResponse:
     """
-    Main orchestration pipeline.
+    Main orchestration pipeline - the Agentic AI Framework coordinator.
 
     Steps:
-      1. Extract text from PDF (local)
-      2. Detect user intent via LLM (should save? focus?)
-      3. Parallel: search past cases + get applicable laws + generate case summary
-      4. Sequential: generate questions (needs case text + laws + cases)
-      5. Final synthesis via LLM
-      6. If intent says save → upload to KG (fire-and-forget)
-      7. Save to memory
+      1. Extract text from PDF (local - PyMuPDF)
+      2. Detect user intent via LLM (save? focus?)
+      3. Parallel: search past cases + get applicable laws
+      4. Generate case summary via LLM (with cases + laws context)
+      5. Generate questions (sequential - needs case text + laws + cases)
+      6. Final synthesis via LLM (refine summary with questions)
+      7. If save intent → upload to KG (non-blocking)
+      8. Save to conversation memory
 
     Graceful degradation: if any service fails, pipeline continues with partial results.
     """
@@ -151,11 +181,15 @@ async def run_analysis_pipeline(
 
     file_size_mb = round(len(pdf_bytes) / (1024 * 1024), 2)
 
-    # --- Step 2: Detect user intent ---
+    # --- Step 2: Detect user intent via LLM ---
     logger.info(f"[{analysis_id}] Step 2: Detecting user intent")
     intent = await detect_user_intent(user_prompt)
     should_save = intent.get("should_save_case", False)
-    logger.info(f"[{analysis_id}] Intent: save={should_save}, focus={intent.get('analysis_focus')}")
+    logger.info(
+        f"[{analysis_id}] Intent: save={should_save}, "
+        f"focus={intent.get('analysis_focus')}, "
+        f"topics={intent.get('key_topics')}"
+    )
 
     # --- Step 3: Get conversation history for context ---
     conversation_history = get_conversation_history(session_id)
@@ -163,31 +197,29 @@ async def run_analysis_pipeline(
     # Save user message to memory
     save_conversation(session_id, "user", f"[File: {filename}] {user_prompt}")
 
-    # --- Step 4: Parallel calls - past cases + laws ---
-    logger.info(f"[{analysis_id}] Step 3-4: Parallel service calls")
+    # --- Step 4: Parallel calls to specialist agents ---
+    logger.info(f"[{analysis_id}] Step 3-4: Parallel calls → PastCase + LawStatKG")
 
     cases_task = search_similar_cases(pdf_bytes, filename)
     laws_task = get_applicable_laws(pdf_bytes, filename)
 
-    cases_data, laws_data = await asyncio.gather(
-        cases_task, laws_task, return_exceptions=True
-    )
+    results = await asyncio.gather(cases_task, laws_task, return_exceptions=True)
 
     # Handle exceptions from gather
-    if isinstance(cases_data, Exception):
-        logger.error(f"[{analysis_id}] Past case search exception: {cases_data}")
-        cases_data = {"similar_cases": [], "new_case_id": ""}
+    cases_data = results[0] if not isinstance(results[0], Exception) else {"similar_cases": []}
+    laws_data = results[1] if not isinstance(results[1], Exception) else {"applicable_laws": []}
 
-    if isinstance(laws_data, Exception):
-        logger.error(f"[{analysis_id}] Law search exception: {laws_data}")
-        laws_data = {"applicable_laws": []}
+    if isinstance(results[0], Exception):
+        logger.error(f"[{analysis_id}] Past case search exception: {results[0]}")
+    if isinstance(results[1], Exception):
+        logger.error(f"[{analysis_id}] Law search exception: {results[1]}")
 
     # Format for LLM context
     cases_text = _format_cases_text(cases_data)
     laws_text = _format_laws_text(laws_data)
 
-    # --- Step 5: Generate case summary via LLM ---
-    logger.info(f"[{analysis_id}] Step 5: Generating case summary via LLM")
+    # --- Step 5: Generate case summary via LLM (Reasoning Engine) ---
+    logger.info(f"[{analysis_id}] Step 5: Generating case summary via Gemini 2.5")
     case_summary = await generate_case_summary(
         case_text=case_text,
         user_prompt=user_prompt,
@@ -196,19 +228,19 @@ async def run_analysis_pipeline(
         conversation_history=conversation_history,
     )
 
-    # --- Step 6: Generate questions (sequential - needs context from above) ---
-    logger.info(f"[{analysis_id}] Step 6: Generating legal questions")
+    # --- Step 6: Generate questions via QuestionGen agent ---
+    logger.info(f"[{analysis_id}] Step 6: Generating legal questions (may take several minutes)")
     questions_data = await generate_questions(case_text, laws_text, cases_text)
 
-    # --- Step 7: Final synthesis ---
+    # --- Step 7: Final synthesis via LLM ---
     logger.info(f"[{analysis_id}] Step 7: Final synthesis")
     raw_questions = questions_data.get("questions", "")
     final_summary = await synthesize_analysis(case_summary, raw_questions, user_prompt)
 
-    # --- Step 8: Dynamic save decision ---
+    # --- Step 8: Dynamic save decision based on user intent ---
     saved_for_reference = False
     if should_save:
-        logger.info(f"[{analysis_id}] Step 8: User intent detected - saving case to KG")
+        logger.info(f"[{analysis_id}] Step 8: User intent → saving case to KG")
         try:
             save_result = await upload_case_to_kg(pdf_bytes, filename)
             saved_for_reference = bool(save_result.get("case_id"))

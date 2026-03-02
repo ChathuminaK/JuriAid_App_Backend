@@ -33,7 +33,7 @@ settings = get_settings()
 
 app = FastAPI(
     title="JuriAid Orchestrator",
-    description="Agentic AI Framework - Central coordinator for JuriAid legal analysis",
+    description="Agentic AI Framework - Central coordinator for JuriAid legal analysis system",
     version="2.0.0",
 )
 
@@ -46,10 +46,10 @@ app.add_middleware(
 )
 
 
-# ---------- Helpers ----------
+# ---------- File Validation ----------
 
 async def _validate_pdf(file: UploadFile) -> bytes:
-    """Validate uploaded file is a proper PDF. Returns bytes."""
+    """Validate uploaded file is a proper PDF within size limits."""
 
     # Check content type
     if file.content_type not in ("application/pdf", "application/octet-stream"):
@@ -97,17 +97,30 @@ async def health_check():
 
 @app.post("/api/analyze", response_model=AnalysisResponse)
 async def analyze_case(
-    file: UploadFile = File(..., description="Sri Lankan legal case PDF"),
-    prompt: str = Form(default="Analyze this case", description="User prompt for analysis guidance"),
+    file: UploadFile = File(..., description="Sri Lankan legal case PDF. Max 10MB."),
+    prompt: str = Form(
+        default="Analyze this case",
+        description="User prompt - guides analysis focus. Include 'save' to store case for future reference.",
+    ),
     user: dict = Depends(verify_token),
 ):
     """
-    Main analysis pipeline.
+    POST /api/analyze - Main analysis pipeline.
 
-    - Accepts PDF + prompt (no save_for_reference field)
-    - LLM dynamically detects if user wants to save based on prompt
-    - Runs: PDF extract → parallel(past cases + laws) → LLM summary → questions → synthesis
-    - If save intent detected → auto-saves to KG
+    Accepts: file (PDF) + prompt (string)
+    
+    The LLM dynamically detects user intent from the prompt:
+    - "Analyze this divorce case" → analysis only
+    - "Analyze and save this case for future reference" → analysis + save to KG
+
+    Pipeline steps:
+      1. PyMuPDF extract text from PDF
+      2. LLM intent detection from prompt
+      3. Parallel: POST :8002/search + POST :8003/case/laws
+      4. Gemini 2.5 → case summary with legal reasoning
+      5. POST :8004/generate-questions → investigation questions
+      6. Gemini 2.5 → final synthesis
+      7. (if save intent) POST :8002/admin/upload-case
     """
     logger.info(f"Analyze request from user {user.get('sub')} | file={file.filename}")
 
@@ -139,7 +152,7 @@ async def save_case(
     user: dict = Depends(verify_token),
 ):
     """
-    Save case PDF to Knowledge Graph without running full analysis.
+    POST /api/cases/save - Save case PDF to Knowledge Graph without full analysis.
     Internally calls POST :8002/admin/upload-case.
     """
     logger.info(f"Save case request from user {user.get('sub')} | file={file.filename}")

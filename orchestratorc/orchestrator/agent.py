@@ -13,32 +13,46 @@ settings = get_settings()
 # ---------- LLM Initialization ----------
 
 _llm = None
+_llm_initialized = False  # Track whether we've tried initialization
 
 
 def _get_llm():
     """Lazy-load Gemini LLM via LangChain. Returns None if unavailable."""
-    global _llm
-    if _llm is not None:
+    global _llm, _llm_initialized
+
+    if _llm_initialized:
         return _llm
 
     if not settings.GEMINI_API_KEY:
         logger.error("GEMINI_API_KEY not set - LLM features disabled")
+        _llm_initialized = True
         return None
 
     try:
         from langchain_google_genai import ChatGoogleGenerativeAI
 
         _llm = ChatGoogleGenerativeAI(
-            model="gemini-2.0-flash",
+            model="gemini-2.5-flash",
             google_api_key=settings.GEMINI_API_KEY,
             temperature=0.3,
-            max_output_tokens=2048,
+            max_output_tokens=4096,
         )
-        logger.info("Gemini LLM initialized successfully")
+        # Quick test to verify model works
+        logger.info("Gemini LLM (gemini-2.5-flash) initialized successfully")
+        _llm_initialized = True
         return _llm
     except Exception as e:
         logger.error(f"Failed to initialize Gemini LLM: {e}")
+        _llm_initialized = True
+        _llm = None
         return None
+
+
+def reset_llm():
+    """Reset LLM so it can be re-initialized (useful after config change)."""
+    global _llm, _llm_initialized
+    _llm = None
+    _llm_initialized = False
 
 
 # ---------- Intent Detection ----------
@@ -75,17 +89,21 @@ Return JSON with exactly these fields:
   "key_topics": ["topic1", "topic2"] (legal topics mentioned)
 }}
 
-Return ONLY the JSON, no other text."""
+Return ONLY the JSON object, no markdown, no code blocks, no other text."""
 
         response = await llm.ainvoke(intent_prompt)
         content = response.content.strip()
 
         # Clean markdown code blocks if present
         if content.startswith("```"):
-            content = content.split("\n", 1)[-1]
-            if content.endswith("```"):
-                content = content[:-3]
-            content = content.strip()
+            lines = content.split("\n")
+            # Remove first line (```json) and last line (```)
+            cleaned_lines = []
+            for line in lines:
+                if line.strip().startswith("```"):
+                    continue
+                cleaned_lines.append(line)
+            content = "\n".join(cleaned_lines).strip()
 
         parsed = json.loads(content)
 
@@ -96,8 +114,7 @@ Return ONLY the JSON, no other text."""
         }
 
     except Exception as e:
-        logger.warning(f"Intent detection failed, using defaults: {e}")
-        # Fallback keyword detection
+        logger.warning(f"Intent detection failed, using keyword fallback: {e}")
         lower_prompt = prompt.lower()
         save_keywords = ["save", "store", "keep", "reference", "future", "remember"]
         default_intent["should_save_case"] = any(kw in lower_prompt for kw in save_keywords)
@@ -114,70 +131,92 @@ async def generate_case_summary(
     conversation_history: list[dict] = None,
 ) -> str:
     """
-    Use Gemini to generate a comprehensive case summary.
-    Falls back to a basic summary if LLM is unavailable.
+    Use Gemini to generate a comprehensive case summary and legal analysis.
+    Falls back to a basic text summary if LLM is unavailable.
     """
     llm = _get_llm()
     if not llm:
-        # Fallback: return truncated case text as summary
-        return f"## Case Summary\n\n{case_text[:1500]}\n\n*Note: AI summary unavailable.*"
+        return _fallback_summary(case_text)
 
     try:
         # Build context from conversation history
         history_context = ""
         if conversation_history:
             history_context = "\n\nPrevious conversation context:\n"
-            for msg in conversation_history[-5:]:  # Last 5 messages
+            for msg in conversation_history[-5:]:
                 history_context += f"- {msg['role']}: {msg['content'][:200]}\n"
 
-        summary_prompt = f"""You are a senior Sri Lankan legal analyst. Analyze this legal case thoroughly.
+        summary_prompt = f"""You are a senior Sri Lankan legal analyst with 20 years of experience.
+Analyze this legal case document thoroughly based on the user's request.
 
-User's request: {user_prompt}
+USER REQUEST: {user_prompt}
 {history_context}
 
-CASE DOCUMENT:
-{case_text[:4000]}
+CASE DOCUMENT (extracted from PDF):
+{case_text[:6000]}
 
-SIMILAR PAST CASES:
+SIMILAR PAST CASES FOUND:
 {similar_cases_text[:2000]}
 
-APPLICABLE LAWS:
+APPLICABLE SRI LANKAN LAWS:
 {laws_text[:2000]}
 
-Provide a comprehensive legal analysis in this format:
+Provide a comprehensive legal analysis in this structured format:
 
 ## Case Overview
-Brief overview of the case
+Brief overview identifying parties, court, case number, and nature of dispute
 
 ## Key Facts
-Numbered list of important facts
+Numbered list of the most important facts from the case document
 
-## Legal Issues
-Identified legal issues and concerns
+## Legal Issues Identified
+What are the core legal questions this case raises?
 
 ## Applicable Legal Framework
-Relevant Sri Lankan laws and how they apply
+Which Sri Lankan laws, ordinances, and sections apply and how?
 
-## Analysis based on Similar Cases
-How past cases inform this case
+## Analysis Based on Similar Cases
+How do the similar past cases inform the likely outcome?
 
-## Preliminary Assessment
-Strategic assessment and recommendations
+## Preliminary Assessment & Recommendations
+Strategic assessment and practical recommendations for the lawyer
 
-Be specific to Sri Lankan law. Be thorough but concise."""
+Be specific to Sri Lankan law. Reference actual sections and ordinances where possible.
+Be thorough but concise. Do NOT include raw PDF text - analyze and summarize it."""
 
         response = await llm.ainvoke(summary_prompt)
         summary = response.content.strip()
 
-        if len(summary) < 50:
-            logger.warning("LLM returned very short summary")
-            return f"## Case Summary\n\n{case_text[:1500]}"
+        if len(summary) < 100:
+            logger.warning("LLM returned very short summary, using fallback")
+            return _fallback_summary(case_text)
 
         return summary
 
     except Exception as e:
         logger.error(f"Case summary generation failed: {e}")
-        return f"## Case Summary\n\n{case_text[:1500]}\n\n*Note: AI analysis encountered an error.*"
+        return _fallback_summary(case_text)
+
+
+def _fallback_summary(case_text: str) -> str:
+    """Generate a basic structured summary when LLM is unavailable."""
+    # Try to extract key info from the text
+    lines = case_text[:3000].split("\n")
+    clean_lines = [l.strip() for l in lines if l.strip() and not l.strip().startswith("Page")]
+
+    preview = "\n".join(clean_lines[:30])
+
+    return f"""## Case Overview
+(AI-powered analysis unavailable - showing extracted case information)
+
+## Extracted Case Content
+{preview}
+
+## Note
+The AI reasoning engine could not process this case at this time.
+The case text ({len(case_text)} characters) has been extracted successfully.
+Similar cases and applicable laws were retrieved from the knowledge base.
+Please retry or review the extracted content manually."""
 
 
 # ---------- Final Synthesis ----------
@@ -188,34 +227,44 @@ async def synthesize_analysis(
     user_prompt: str,
 ) -> str:
     """
-    Final synthesis pass: refine the case summary with generated questions.
+    Final synthesis: refine case summary incorporating generated questions.
     If LLM unavailable, returns the case summary as-is.
     """
     llm = _get_llm()
     if not llm:
         return case_summary
 
+    # If no questions were generated, skip synthesis
+    if not questions or len(questions.strip()) < 20:
+        return case_summary
+
     try:
-        synthesis_prompt = f"""You are a senior Sri Lankan legal advisor doing a final review.
+        synthesis_prompt = f"""You are a senior Sri Lankan legal advisor performing a final review.
 
 USER REQUEST: {user_prompt}
 
-CASE ANALYSIS:
-{case_summary[:3000]}
+CASE ANALYSIS (from previous step):
+{case_summary[:4000]}
 
-GENERATED QUESTIONS FOR THE CASE:
+GENERATED INVESTIGATION QUESTIONS:
 {questions[:2000]}
 
-Refine the analysis by:
-1. Ensuring all key legal points are addressed
-2. Highlighting any gaps the questions reveal
-3. Adding strategic recommendations
+Perform a final refinement:
+1. Keep the original structured analysis format
+2. Integrate insights from the generated questions where relevant
+3. Highlight any gaps the questions reveal
+4. Add a final "## Recommended Next Steps" section
 
-Output the final refined analysis. Keep the same structured format."""
+Output the complete refined analysis. Maintain the structured format with ## headings."""
 
         response = await llm.ainvoke(synthesis_prompt)
-        return response.content.strip() or case_summary
+        result = response.content.strip()
+
+        if len(result) < 100:
+            return case_summary
+
+        return result
 
     except Exception as e:
-        logger.warning(f"Synthesis failed, using original summary: {e}")
+        logger.warning(f"Synthesis failed, returning original analysis: {e}")
         return case_summary

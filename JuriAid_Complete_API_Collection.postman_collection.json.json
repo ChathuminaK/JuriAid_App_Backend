@@ -1,7 +1,7 @@
 {
   "info": {
-    "name": "JuriAid - Complete API Collection v2.0",
-    "description": "100% Accurate Full API Collection for all 5 JuriAid Backend Microservices",
+    "name": "JuriAid - Complete API Collection v2.1",
+    "description": "Full API Collection for all 5 JuriAid Backend Microservices. v2.1: Dynamic save intent via LLM, gemini-2.5-flash model.",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
   "variable": [
@@ -23,13 +23,7 @@
             "method": "GET",
             "header": [],
             "url": { "raw": "{{auth_url}}/", "host": ["{{auth_url}}"], "path": [""] }
-          },
-          "response": [
-            {
-              "name": "Success", "status": "OK", "code": 200,
-              "body": "{\n  \"status\": \"ok\",\n  \"service\": \"JuriAid Auth Service\",\n  \"version\": \"1.0.0\"\n}"
-            }
-          ]
+          }
         },
         {
           "name": "Signup - Register New User",
@@ -41,13 +35,7 @@
               "raw": "{\n  \"email\": \"kumari@juriaid.lk\",\n  \"password\": \"SecurePass@123\",\n  \"full_name\": \"Kumari Silva\",\n  \"phone\": \"+94771234567\"\n}"
             },
             "url": { "raw": "{{auth_url}}/auth/signup", "host": ["{{auth_url}}"], "path": ["auth","signup"] }
-          },
-          "response": [
-            {
-              "name": "Success - 201 Created", "status": "Created", "code": 201,
-              "body": "{\n  \"access_token\": \"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...\",\n  \"user\": {\n    \"id\": 1,\n    \"email\": \"kumari@juriaid.lk\",\n    \"full_name\": \"Kumari Silva\",\n    \"role\": \"user\",\n    \"subscription_tier\": \"free\"\n  }\n}"
-            }
-          ]
+          }
         },
         {
           "name": "Login - Get JWT Token",
@@ -59,8 +47,8 @@
                   "var jsonData = pm.response.json();",
                   "if (jsonData.access_token) {",
                   "    pm.collectionVariables.set('token', jsonData.access_token);",
-                  "    console.log('✅ Token saved:', jsonData.access_token.substring(0,30) + '...');",
-                  "} else { console.log('❌ No token in response'); }"
+                  "    console.log('Token saved');",
+                  "}"
                 ]
               }
             }
@@ -73,28 +61,15 @@
               "raw": "{\n  \"email\": \"kumari@juriaid.lk\",\n  \"password\": \"SecurePass@123\"\n}"
             },
             "url": { "raw": "{{auth_url}}/auth/login", "host": ["{{auth_url}}"], "path": ["auth","login"] }
-          },
-          "response": [
-            {
-              "name": "Success", "status": "OK", "code": 200,
-              "body": "{\n  \"access_token\": \"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...\",\n  \"user\": {\n    \"id\": 1,\n    \"email\": \"kumari@juriaid.lk\",\n    \"full_name\": \"Kumari Silva\",\n    \"role\": \"user\",\n    \"subscription_tier\": \"free\"\n  }\n}"
-            }
-          ]
+          }
         },
         {
           "name": "Verify Token",
           "request": {
             "method": "GET",
             "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
-            "url": { "raw": "{{auth_url}}/auth/verify", "host": ["{{auth_url}}"], "path": ["auth","verify"] },
-            "description": "Used by Orchestrator to validate every request. Returns user_id, email, role, subscription_tier."
-          },
-          "response": [
-            {
-              "name": "Valid Token", "status": "OK", "code": 200,
-              "body": "{\n  \"valid\": true,\n  \"user_id\": 1,\n  \"email\": \"kumari@juriaid.lk\",\n  \"role\": \"user\",\n  \"subscription_tier\": \"free\"\n}"
-            }
-          ]
+            "url": { "raw": "{{auth_url}}/auth/verify", "host": ["{{auth_url}}"], "path": ["auth","verify"] }
+          }
         },
         {
           "name": "Get My Profile",
@@ -132,13 +107,7 @@
             "method": "GET",
             "header": [],
             "url": { "raw": "{{pastcase_url}}/health", "host": ["{{pastcase_url}}"], "path": ["health"] }
-          },
-          "response": [
-            {
-              "name": "Connected", "status": "OK", "code": 200,
-              "body": "{\n  \"database\": \"connected\"\n}"
-            }
-          ]
+          }
         },
         {
           "name": "Search Similar Past Cases",
@@ -151,18 +120,11 @@
                 { "key": "file", "type": "file", "src": "", "description": "Upload new legal case PDF" }
               ]
             },
-            "url": { "raw": "{{pastcase_url}}/search", "host": ["{{pastcase_url}}"], "path": ["search"] },
-            "description": "Upload case PDF → LegalBERT embeddings → hybrid search Neo4j → returns similar past cases. Also auto-stores new case in KG."
-          },
-          "response": [
-            {
-              "name": "Similar Cases Found", "status": "OK", "code": 200,
-              "body": "{\n  \"new_case_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n  \"similar_cases\": [\n    {\n      \"case_id\": \"abc-123\",\n      \"case_name\": \"Fernando v Fernando 2019\",\n      \"score\": 0.89,\n      \"complaint\": \"Petitioner sought divorce on grounds of adultery\",\n      \"defense\": \"Respondent denied all allegations\"\n    }\n  ]\n}"
-            }
-          ]
+            "url": { "raw": "{{pastcase_url}}/search", "host": ["{{pastcase_url}}"], "path": ["search"] }
+          }
         },
         {
-          "name": "Admin - Upload Case PDF to Knowledge Graph",
+          "name": "Admin - Upload Case PDF to KG",
           "request": {
             "method": "POST",
             "header": [],
@@ -172,26 +134,15 @@
                 { "key": "file", "type": "file", "src": "", "description": "Upload Sri Lankan legal case PDF" }
               ]
             },
-            "url": { "raw": "{{pastcase_url}}/admin/upload-case", "host": ["{{pastcase_url}}"], "path": ["admin","upload-case"] },
-            "description": "Store legal case PDF in Neo4j KG. Used by Orchestrator /api/cases/save endpoint."
-          },
-          "response": [
-            {
-              "name": "Case Stored", "status": "OK", "code": 200,
-              "body": "{\n  \"message\": \"Case stored in Knowledge Graph\",\n  \"case_id\": \"550e8400-e29b-41d4-a716-446655440000\"\n}"
-            }
-          ]
+            "url": { "raw": "{{pastcase_url}}/admin/upload-case", "host": ["{{pastcase_url}}"], "path": ["admin","upload-case"] }
+          }
         },
         {
           "name": "Get Case by ID",
           "request": {
             "method": "GET",
             "header": [],
-            "url": {
-              "raw": "{{pastcase_url}}/case/550e8400-e29b-41d4-a716-446655440000",
-              "host": ["{{pastcase_url}}"],
-              "path": ["case","550e8400-e29b-41d4-a716-446655440000"]
-            }
+            "url": { "raw": "{{pastcase_url}}/case/550e8400-e29b-41d4-a716-446655440000", "host": ["{{pastcase_url}}"], "path": ["case","550e8400-e29b-41d4-a716-446655440000"] }
           }
         }
       ]
@@ -220,15 +171,8 @@
                 { "key": "as_of_date", "value": "today", "type": "text" }
               ]
             },
-            "url": { "raw": "{{lawstatkg_url}}/case/laws", "host": ["{{lawstatkg_url}}"], "path": ["case","laws"] },
-            "description": "Upload case PDF → PyMuPDF extract → hybrid law search → applicable Sri Lankan laws. Called by Orchestrator pipeline."
-          },
-          "response": [
-            {
-              "name": "Success", "status": "OK", "code": 200,
-              "body": "{\n  \"applicable_laws\": [\n    {\n      \"act_id\": \"MCO_1907\",\n      \"title\": \"Matrimonial Causes Ordinance No. 15 of 1907\",\n      \"section\": \"Section 19\",\n      \"relevance_score\": 0.92,\n      \"content\": \"Grounds for divorce based on adultery\"\n    }\n  ]\n}"
-            }
-          ]
+            "url": { "raw": "{{lawstatkg_url}}/case/laws", "host": ["{{lawstatkg_url}}"], "path": ["case","laws"] }
+          }
         },
         {
           "name": "Law Search",
@@ -247,12 +191,7 @@
           "request": {
             "method": "GET",
             "header": [],
-            "url": {
-              "raw": "{{lawstatkg_url}}/statute/MCO_1907?date=today",
-              "host": ["{{lawstatkg_url}}"],
-              "path": ["statute","MCO_1907"],
-              "query": [{ "key": "date", "value": "today" }]
-            }
+            "url": { "raw": "{{lawstatkg_url}}/statute/MCO_1907?date=today", "host": ["{{lawstatkg_url}}"], "path": ["statute","MCO_1907"], "query": [{ "key": "date", "value": "today" }] }
           }
         }
       ]
@@ -268,17 +207,11 @@
             "header": [{ "key": "Content-Type", "value": "application/json" }],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"case_text\": \"The petitioner Kumari Silva, aged 34, married the respondent Nimal Silva, aged 38, on 15th March 2018 at the Colombo District Court. The parties lived together at No. 45, Galle Road, Colombo 03. The respondent has been guilty of adultery since January 2022 and abandoned the matrimonial home in June 2023. The petitioner seeks dissolution of marriage, custody of one minor child, monthly maintenance of LKR 50,000 and division of matrimonial property.\",\n  \"law\": \"Matrimonial Causes Ordinance No. 15 of 1907 - Section 19 Adultery, Section 20 Desertion for 2 years, Section 21 Cruelty. Maintenance Act No. 37 of 1999 - Section 2 Duty to maintain spouse and children.\",\n  \"cases\": \"Fernando v Fernando (2019) - Colombo District Court upheld divorce on adultery and desertion grounds. Perera v Perera (2021) - Supreme Court ruled physical abuse constitutes cruelty under Section 21.\"\n}"
+              "raw": "{\n  \"case_text\": \"The petitioner Kumari Silva married the respondent Nimal Silva on 15th March 2018 at Colombo District Court. The respondent has been guilty of adultery since January 2022 and abandoned the matrimonial home in June 2023.\",\n  \"law\": \"Matrimonial Causes Ordinance No. 15 of 1907 - Section 19 Adultery, Section 20 Desertion.\",\n  \"cases\": \"Fernando v Fernando (2019) - divorce on adultery and desertion grounds.\"\n}"
             },
             "url": { "raw": "{{questiongen_url}}/generate-questions", "host": ["{{questiongen_url}}"], "path": ["generate-questions"] },
-            "description": "Multi-agent pipeline: case_agent → law_agent → reasoning_agent → question_agent → validation_agent. Body: {case_text, law, cases}. Expect ~1 min (CPU inference)."
-          },
-          "response": [
-            {
-              "name": "Success", "status": "OK", "code": 200,
-              "body": "{\n  \"questions\": \"1. What are the petitioner's rights under Matrimonial Causes Ordinance No. 15 of 1907?\\n2. Under Section 19, what evidence is required to prove adultery?\\n3. Can the petitioner claim maintenance under Maintenance Act No. 37 of 1999?\\n4. What custody arrangements can be sought for the minor child?\\n5. How might Fernando v Fernando (2019) influence this case?\"\n}"
-            }
-          ]
+            "description": "Multi-agent pipeline. Expect ~3-8 min on CPU (Ollama inference)."
+          }
         }
       ]
     },
@@ -291,88 +224,11 @@
           "request": {
             "method": "GET",
             "header": [],
-            "url": { "raw": "{{orchestrator_url}}/health", "host": ["{{orchestrator_url}}"], "path": ["health"] },
-            "description": "GET /health - No auth required. Returns service status."
-          },
-          "response": [
-            {
-              "name": "Success", "status": "OK", "code": 200,
-              "body": "{\n  \"status\": \"healthy\",\n  \"service\": \"JuriAid Orchestrator\",\n  \"version\": \"2.0.0\"\n}"
-            }
-          ]
+            "url": { "raw": "{{orchestrator_url}}/health", "host": ["{{orchestrator_url}}"], "path": ["health"] }
+          }
         },
-
         {
           "name": "Analyze Case - Full Pipeline",
-          "request": {
-            "method": "POST",
-            "header": [
-              { "key": "Authorization", "value": "Bearer {{token}}", "description": "JWT token from /auth/login" }
-            ],
-            "body": {
-              "mode": "formdata",
-              "formdata": [
-                {
-                  "key": "file",
-                  "type": "file",
-                  "src": "",
-                  "description": "Sri Lankan legal case PDF. Max 10MB. PDF only required."
-                },
-                {
-                  "key": "prompt",
-                  "value": "Analyze this Sri Lankan divorce case",
-                  "type": "text",
-                  "description": "User prompt for analysis guidance (string)"
-                },
-                {
-                  "key": "save_for_reference",
-                  "value": "false",
-                  "type": "text",
-                  "description": "true = also save case to Neo4j KG via /admin/upload-case after analysis"
-                }
-              ]
-            },
-            "url": {
-              "raw": "{{orchestrator_url}}/api/analyze",
-              "host": ["{{orchestrator_url}}"],
-              "path": ["api","analyze"]
-            },
-            "description": "POST /api/analyze\n\nMAIN PIPELINE - Requires JWT Bearer token.\n\nInternally runs:\n  Step 1: PyMuPDF extract text from PDF (local)\n  Step 2: POST :8002/search → similar past cases (parallel)\n  Step 3: POST :8003/case/laws → applicable laws (parallel)\n  Step 4: LangChain + Gemini → case summary (parallel)\n  Step 5: POST :8004/generate-questions → questions (sequential)\n  Step 6: LangChain + Gemini → synthesize final analysis\n  Step 7: (if save_for_reference=true) POST :8002/admin/upload-case\n\nForm fields:\n  file: PDF (required)\n  prompt: string (default: 'Analyze this case')\n  save_for_reference: bool string 'true'/'false' (default: 'false')"
-          },
-          "response": [
-            {
-              "name": "Full Analysis Success", "status": "OK", "code": 200,
-              "body": "{\n  \"analysis_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n  \"status\": \"completed\",\n  \"case_summary\": \"## Case Overview\\nKumari Silva v Nimal Silva - Colombo District Court...\\n\\n## Key Facts\\n1. Marriage on 15th March 2018...\\n\\n## Legal Issues\\nAdultery, desertion, domestic violence...\\n\\n## Applicable Legal Framework\\nMatrimonial Causes Ordinance No.15 of 1907...\",\n  \"similar_cases\": [\n    {\n      \"case_id\": \"abc-123\",\n      \"case_name\": \"Fernando v Fernando 2019\",\n      \"score\": 0.89,\n      \"complaint\": \"Petitioner sought divorce on grounds of adultery and desertion\",\n      \"defense\": \"Respondent denied all allegations\"\n    },\n    {\n      \"case_id\": \"def-456\",\n      \"case_name\": \"Perera v Perera 2021\",\n      \"score\": 0.76,\n      \"complaint\": \"Physical abuse and cruelty by respondent\",\n      \"defense\": \"Respondent claimed incidents were accidental\"\n    }\n  ],\n  \"relevant_laws\": [\n    {\n      \"act_id\": \"MCO_1907\",\n      \"title\": \"Matrimonial Causes Ordinance No. 15 of 1907\",\n      \"section\": \"Section 19\",\n      \"relevance_score\": 0.92,\n      \"content\": \"Grounds for divorce based on adultery\"\n    },\n    {\n      \"act_id\": \"MA_1999\",\n      \"title\": \"Maintenance Act No. 37 of 1999\",\n      \"section\": \"Section 2\",\n      \"relevance_score\": 0.85,\n      \"content\": \"Duty to maintain spouse and children\"\n    }\n  ],\n  \"generated_questions\": [\n    {\n      \"question_id\": 1,\n      \"question\": \"What evidence exists to prove adultery under Section 19 of the Matrimonial Causes Ordinance?\"\n    },\n    {\n      \"question_id\": 2,\n      \"question\": \"Has the desertion period of 2 years required under Section 20 been satisfied?\"\n    },\n    {\n      \"question_id\": 3,\n      \"question\": \"What maintenance amount can be claimed under the Maintenance Act No. 37 of 1999?\"\n    }\n  ],\n  \"metadata\": {\n    \"filename\": \"divorce_case.pdf\",\n    \"file_size_mb\": 0.85,\n    \"text_length\": 4200,\n    \"user_id\": 1,\n    \"user_prompt\": \"Analyze this Sri Lankan divorce case\",\n    \"saved_for_reference\": false\n  },\n  \"created_at\": \"2026-03-02T04:55:00Z\",\n  \"processing_time_seconds\": 42.5\n}"
-            },
-            {
-              "name": "Not PDF - 400", "status": "Bad Request", "code": 400,
-              "body": "{\n  \"detail\": \"Only PDF files accepted\"\n}"
-            },
-            {
-              "name": "File Too Large - 413", "status": "Request Entity Too Large", "code": 413,
-              "body": "{\n  \"detail\": \"File too large (11.2MB). Max: 10MB\"\n}"
-            },
-            {
-              "name": "Empty File - 400", "status": "Bad Request", "code": 400,
-              "body": "{\n  \"detail\": \"File is empty\"\n}"
-            },
-            {
-              "name": "Unauthorized - 401", "status": "Unauthorized", "code": 401,
-              "body": "{\n  \"detail\": \"Invalid or expired token\"\n}"
-            },
-            {
-              "name": "Auth Service Down - 503", "status": "Service Unavailable", "code": 503,
-              "body": "{\n  \"detail\": \"Auth service unavailable\"\n}"
-            },
-            {
-              "name": "Pipeline Failed - 500", "status": "Internal Server Error", "code": 500,
-              "body": "{\n  \"detail\": \"Analysis pipeline failed: ...\"\n}"
-            }
-          ]
-        },
-
-        {
-          "name": "Analyze Case - With Save Reference",
           "request": {
             "method": "POST",
             "header": [
@@ -381,13 +237,17 @@
             "body": {
               "mode": "formdata",
               "formdata": [
-                { "key": "file", "type": "file", "src": "", "description": "Legal case PDF" },
-                { "key": "prompt", "value": "Analyze this divorce case and identify applicable Sri Lankan laws", "type": "text" },
                 {
-                  "key": "save_for_reference",
-                  "value": "true",
+                  "key": "file",
+                  "type": "file",
+                  "src": "",
+                  "description": "Sri Lankan legal case PDF. Max 10MB."
+                },
+                {
+                  "key": "prompt",
+                  "value": "Analyze this Sri Lankan divorce case",
                   "type": "text",
-                  "description": "Runs full pipeline THEN saves to Neo4j KG via POST :8002/admin/upload-case"
+                  "description": "User prompt for analysis. Include 'save for reference' to auto-save case to KG."
                 }
               ]
             },
@@ -396,16 +256,60 @@
               "host": ["{{orchestrator_url}}"],
               "path": ["api","analyze"]
             },
-            "description": "Full analysis pipeline + saves case to Knowledge Graph. Same response as normal analyze."
+            "description": "POST /api/analyze\n\nMAIN PIPELINE - Requires JWT Bearer token.\nOnly 2 form fields: file (PDF) + prompt (string).\n\nThe LLM dynamically detects user intent from the prompt:\n- 'Analyze this case' → analysis only\n- 'Analyze and save for future reference' → analysis + save to Neo4j KG\n\nPipeline:\n  1. PyMuPDF text extraction\n  2. Gemini 2.5 intent detection\n  3. Parallel: :8002/search + :8003/case/laws\n  4. Gemini 2.5 case summary + reasoning\n  5. :8004/generate-questions (Ollama CPU, ~5 min)\n  6. Gemini 2.5 final synthesis\n  7. (if save intent) :8002/admin/upload-case\n\nExpect ~5-10 min total (QuestionGen is CPU-bound)."
+          },
+          "response": [
+            {
+              "name": "Full Analysis Success", "status": "OK", "code": 200,
+              "body": "{\n  \"analysis_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n  \"status\": \"completed\",\n  \"case_summary\": \"## Case Overview\\nKumari Silva v Nimal Silva - Colombo District Court...\\n\\n## Key Facts\\n1. Marriage on 15th March 2018...\\n\\n## Legal Issues Identified\\nAdultery, desertion, domestic violence...\\n\\n## Applicable Legal Framework\\nMatrimonial Causes Ordinance No.15 of 1907...\\n\\n## Analysis Based on Similar Cases\\n...\\n\\n## Preliminary Assessment & Recommendations\\n...\",\n  \"similar_cases\": [\n    {\n      \"case_id\": \"abc-123\",\n      \"case_name\": \"Fernando v Fernando 2019\",\n      \"score\": 0.89,\n      \"complaint\": \"Petitioner sought divorce on grounds of adultery\",\n      \"defense\": \"Respondent denied all allegations\"\n    }\n  ],\n  \"relevant_laws\": [\n    {\n      \"act_id\": \"MCO_1907\",\n      \"title\": \"Matrimonial Causes Ordinance No. 15 of 1907\",\n      \"section\": \"Section 19\",\n      \"relevance_score\": 0.92,\n      \"content\": \"Grounds for divorce based on adultery\"\n    }\n  ],\n  \"generated_questions\": [\n    {\n      \"question_id\": 1,\n      \"question\": \"What evidence exists to prove adultery under Section 19?\"\n    }\n  ],\n  \"metadata\": {\n    \"filename\": \"divorce_case.pdf\",\n    \"file_size_mb\": 0.85,\n    \"text_length\": 4200,\n    \"user_id\": 1,\n    \"user_prompt\": \"Analyze this Sri Lankan divorce case\",\n    \"saved_for_reference\": false\n  },\n  \"created_at\": \"2026-03-02T04:55:00Z\",\n  \"processing_time_seconds\": 320.5\n}"
+            },
+            {
+              "name": "Not PDF - 400", "status": "Bad Request", "code": 400,
+              "body": "{ \"detail\": \"Only PDF files accepted\" }"
+            },
+            {
+              "name": "File Too Large - 413", "status": "Request Entity Too Large", "code": 413,
+              "body": "{ \"detail\": \"File too large (11.2MB). Max: 10MB\" }"
+            },
+            {
+              "name": "Unauthorized - 401", "status": "Unauthorized", "code": 401,
+              "body": "{ \"detail\": \"Invalid or expired token\" }"
+            }
+          ]
+        },
+        {
+          "name": "Analyze Case - With Save Intent",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" }
+            ],
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                { "key": "file", "type": "file", "src": "" },
+                {
+                  "key": "prompt",
+                  "value": "Analyze this divorce case and save it for future reference",
+                  "type": "text",
+                  "description": "Including 'save' triggers dynamic save to Neo4j KG after analysis"
+                }
+              ]
+            },
+            "url": {
+              "raw": "{{orchestrator_url}}/api/analyze",
+              "host": ["{{orchestrator_url}}"],
+              "path": ["api","analyze"]
+            },
+            "description": "Same endpoint. The prompt includes 'save for future reference' which triggers LLM to detect save intent and auto-save to KG."
           }
         },
-
         {
           "name": "Save Case Only (No Analysis)",
           "request": {
             "method": "POST",
             "header": [
-              { "key": "Authorization", "value": "Bearer {{token}}", "description": "JWT token required" }
+              { "key": "Authorization", "value": "Bearer {{token}}" }
             ],
             "body": {
               "mode": "formdata",
@@ -414,7 +318,7 @@
                   "key": "file",
                   "type": "file",
                   "src": "",
-                  "description": "Legal case PDF to save for future reference. No analysis is run."
+                  "description": "Legal case PDF to save. No analysis run."
                 }
               ]
             },
@@ -423,24 +327,12 @@
               "host": ["{{orchestrator_url}}"],
               "path": ["api","cases","save"]
             },
-            "description": "POST /api/cases/save\n\nSave case PDF to Knowledge Graph WITHOUT running analysis.\nRequires JWT Bearer token.\n\nInternally calls:\n  POST :8002/search → auto-indexes case in Neo4j\n\nThe case will appear in future /api/analyze similarity searches.\n\nForm fields:\n  file: PDF (required)\n  NOTE: No 'metadata' field - only file is accepted"
+            "description": "POST /api/cases/save - Save only, no analysis. Calls :8002/admin/upload-case."
           },
           "response": [
             {
-              "name": "Saved Successfully", "status": "OK", "code": 200,
+              "name": "Saved", "status": "OK", "code": 200,
               "body": "{\n  \"saved\": true,\n  \"case_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n  \"message\": \"Case saved and indexed for future reference\"\n}"
-            },
-            {
-              "name": "Not PDF - 400", "status": "Bad Request", "code": 400,
-              "body": "{\n  \"detail\": \"Only PDF files accepted\"\n}"
-            },
-            {
-              "name": "Unauthorized - 401", "status": "Unauthorized", "code": 401,
-              "body": "{\n  \"detail\": \"Invalid or expired token\"\n}"
-            },
-            {
-              "name": "PastCase Service Down - 503", "status": "Service Unavailable", "code": 503,
-              "body": "{\n  \"detail\": \"Service unreachable\"\n}"
             }
           ]
         }
@@ -451,102 +343,65 @@
       "name": "🔗 6. End-to-End Full Flow",
       "item": [
         {
-          "name": "Step 1 - Register New User",
+          "name": "Step 1 - Register User",
           "request": {
             "method": "POST",
             "header": [{ "key": "Content-Type", "value": "application/json" }],
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"email\": \"lawyer@juriaid.lk\",\n  \"password\": \"LawyerPass@123\",\n  \"full_name\": \"Janaka Perera\",\n  \"phone\": \"+94712345678\"\n}"
-            },
+            "body": { "mode": "raw", "raw": "{\n  \"email\": \"lawyer@juriaid.lk\",\n  \"password\": \"LawyerPass@123\",\n  \"full_name\": \"Janaka Perera\",\n  \"phone\": \"+94712345678\"\n}" },
             "url": { "raw": "{{auth_url}}/auth/signup", "host": ["{{auth_url}}"], "path": ["auth","signup"] }
           }
         },
         {
           "name": "Step 2 - Login Get Token",
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "exec": [
-                  "var jsonData = pm.response.json();",
-                  "if (jsonData.access_token) {",
-                  "    pm.collectionVariables.set('token', jsonData.access_token);",
-                  "    console.log('✅ Token auto-saved');",
-                  "} else { console.log('❌ Login failed'); }"
-                ]
-              }
-            }
-          ],
+          "event": [{ "listen": "test", "script": { "exec": [ "var j=pm.response.json(); if(j.access_token) pm.collectionVariables.set('token',j.access_token);" ] } }],
           "request": {
             "method": "POST",
             "header": [{ "key": "Content-Type", "value": "application/json" }],
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"email\": \"lawyer@juriaid.lk\",\n  \"password\": \"LawyerPass@123\"\n}"
-            },
+            "body": { "mode": "raw", "raw": "{\n  \"email\": \"lawyer@juriaid.lk\",\n  \"password\": \"LawyerPass@123\"\n}" },
             "url": { "raw": "{{auth_url}}/auth/login", "host": ["{{auth_url}}"], "path": ["auth","login"] }
           }
         },
         {
-          "name": "Step 3 - Verify Token",
-          "request": {
-            "method": "GET",
-            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
-            "url": { "raw": "{{auth_url}}/auth/verify", "host": ["{{auth_url}}"], "path": ["auth","verify"] }
-          }
+          "name": "Step 3 - Orchestrator Health",
+          "request": { "method": "GET", "header": [], "url": { "raw": "{{orchestrator_url}}/health", "host": ["{{orchestrator_url}}"], "path": ["health"] } }
         },
         {
-          "name": "Step 4 - Orchestrator Health",
-          "request": {
-            "method": "GET",
-            "header": [],
-            "url": { "raw": "{{orchestrator_url}}/health", "host": ["{{orchestrator_url}}"], "path": ["health"] }
-          }
-        },
-        {
-          "name": "Step 5 - Build KG: Upload Past Case to Neo4j",
+          "name": "Step 4 - Upload Past Case to KG",
           "request": {
             "method": "POST",
             "header": [],
-            "body": {
-              "mode": "formdata",
-              "formdata": [
-                { "key": "file", "type": "file", "src": "", "description": "Upload a known past case to populate KG first" }
-              ]
-            },
+            "body": { "mode": "formdata", "formdata": [{ "key": "file", "type": "file", "src": "" }] },
             "url": { "raw": "{{pastcase_url}}/admin/upload-case", "host": ["{{pastcase_url}}"], "path": ["admin","upload-case"] }
           }
         },
         {
-          "name": "Step 6 - Save New Case via Orchestrator",
+          "name": "Step 5 - Full Case Analysis",
           "request": {
             "method": "POST",
             "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
             "body": {
               "mode": "formdata",
               "formdata": [
-                { "key": "file", "type": "file", "src": "", "description": "Case PDF to save for future reference" }
+                { "key": "file", "type": "file", "src": "" },
+                { "key": "prompt", "value": "Analyze this Sri Lankan divorce case thoroughly", "type": "text" }
               ]
             },
-            "url": { "raw": "{{orchestrator_url}}/api/cases/save", "host": ["{{orchestrator_url}}"], "path": ["api","cases","save"] }
+            "url": { "raw": "{{orchestrator_url}}/api/analyze", "host": ["{{orchestrator_url}}"], "path": ["api","analyze"] }
           }
         },
         {
-          "name": "Step 7 - Full Case Analysis via Orchestrator",
+          "name": "Step 6 - Analyze + Save for Reference",
           "request": {
             "method": "POST",
             "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
             "body": {
               "mode": "formdata",
               "formdata": [
-                { "key": "file", "type": "file", "src": "", "description": "New case PDF for analysis" },
-                { "key": "prompt", "value": "Analyze this Sri Lankan divorce case and identify all applicable laws", "type": "text" },
-                { "key": "save_for_reference", "value": "true", "type": "text" }
+                { "key": "file", "type": "file", "src": "" },
+                { "key": "prompt", "value": "Analyze this case and save it for future reference", "type": "text" }
               ]
             },
-            "url": { "raw": "{{orchestrator_url}}/api/analyze", "host": ["{{orchestrator_url}}"], "path": ["api","analyze"] },
-            "description": "Final step - full AI analysis. Returns summary, similar_cases, relevant_laws, generated_questions."
+            "url": { "raw": "{{orchestrator_url}}/api/analyze", "host": ["{{orchestrator_url}}"], "path": ["api","analyze"] }
           }
         }
       ]

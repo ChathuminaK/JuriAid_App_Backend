@@ -31,7 +31,10 @@ class Settings:
 
     # Limits
     MAX_FILE_SIZE_MB: int = int(os.getenv("MAX_FILE_SIZE_MB", "10"))
+
+    # Timeouts
     SERVICE_TIMEOUT: float = float(os.getenv("SERVICE_TIMEOUT", "120"))
+    QUESTIONGEN_TIMEOUT: float = float(os.getenv("QUESTIONGEN_TIMEOUT", "600"))
 
     # Retry
     MAX_RETRIES: int = int(os.getenv("MAX_RETRIES", "2"))
