@@ -56,7 +56,7 @@ async def _request_with_retry(
 
 async def search_similar_cases(pdf_bytes: bytes, filename: str) -> dict:
     """
-    POST file to :8002/search → returns similar past cases.
+    POST file to :8002/search -> returns similar past cases.
     Gracefully returns empty result on failure.
     """
     url = f"{settings.PAST_CASE_SERVICE_URL}/search"
@@ -66,7 +66,14 @@ async def search_similar_cases(pdf_bytes: bytes, filename: str) -> dict:
 
     if resp and resp.status_code == 200:
         data = resp.json()
-        logger.info(f"Found {len(data.get('similar_cases', []))} similar cases")
+        logger.info(f"Past case search returned: {list(data.keys())}")
+
+        # Normalize: ensure similar_cases key exists
+        if "similar_cases" not in data and "results" in data:
+            data["similar_cases"] = data["results"]
+
+        case_count = len(data.get("similar_cases", []))
+        logger.info(f"Found {case_count} similar cases")
         return data
 
     logger.warning("Past case search unavailable - continuing without similar cases")
@@ -75,7 +82,7 @@ async def search_similar_cases(pdf_bytes: bytes, filename: str) -> dict:
 
 async def upload_case_to_kg(pdf_bytes: bytes, filename: str) -> dict:
     """
-    POST file to :8002/admin/upload-case → saves case to Neo4j KG.
+    POST file to :8002/admin/upload-case -> saves case to Neo4j KG.
     Used when user intends to save case for future reference.
     """
     url = f"{settings.PAST_CASE_SERVICE_URL}/admin/upload-case"
@@ -96,7 +103,18 @@ async def upload_case_to_kg(pdf_bytes: bytes, filename: str) -> dict:
 
 async def get_applicable_laws(pdf_bytes: bytes, filename: str) -> dict:
     """
-    POST file to :8003/case/laws → returns applicable Sri Lankan laws.
+    POST file to :8003/case/laws -> returns applicable Sri Lankan laws.
+    
+    LawStatKG returns a rich response like:
+    {
+        "personal_law": "General",
+        "personal_law_debug": {...},
+        "queries_generated": [...],
+        "results_count": 3,
+        "relevant_laws": [...]
+    }
+    
+    We extract and normalize the relevant_laws list.
     Gracefully returns empty result on failure.
     """
     url = f"{settings.LAWSTATKG_SERVICE_URL}/case/laws"
@@ -106,20 +124,46 @@ async def get_applicable_laws(pdf_bytes: bytes, filename: str) -> dict:
     resp = await _request_with_retry("POST", url, files=files, data=data)
 
     if resp and resp.status_code == 200:
-        result = resp.json()
-        logger.info(f"Found {len(result.get('applicable_laws', []))} applicable laws")
-        return result
+        raw_data = resp.json()
+        logger.info(f"LawStatKG response keys: {list(raw_data.keys())}")
+
+        # Extract relevant_laws from the full response
+        laws_list = raw_data.get("relevant_laws", [])
+
+        # Normalize each law entry to match our schema
+        normalized_laws = []
+        for law in laws_list:
+            normalized_laws.append({
+                "act_id": law.get("act_id", ""),
+                "title": law.get("act_title", law.get("title", "")),
+                "section": law.get("section_no", law.get("section", "")),
+                "section_title": law.get("section_title", ""),
+                "relevance_score": float(law.get("confidence_score", law.get("relevance_score", 0))),
+                "content": law.get("evidence_from_case", law.get("content", "")),
+                "jurisdiction": law.get("jurisdiction", ""),
+                "valid_from": law.get("valid_from", ""),
+            })
+
+        law_count = len(normalized_laws)
+        personal_law = raw_data.get("personal_law", "Unknown")
+        logger.info(f"Found {law_count} applicable laws (Personal law: {personal_law})")
+
+        return {
+            "applicable_laws": normalized_laws,
+            "personal_law": personal_law,
+            "results_count": raw_data.get("results_count", law_count),
+        }
 
     logger.warning("LawStatKG unavailable - continuing without applicable laws")
-    return {"applicable_laws": []}
+    return {"applicable_laws": [], "personal_law": "Unknown", "results_count": 0}
 
 
 # ---------- Question Generator (Port 8004) ----------
 
 async def generate_questions(case_text: str, laws_text: str, cases_text: str) -> dict:
     """
-    POST JSON to :8004/generate-questions → returns generated legal questions.
-    Uses QUESTIONGEN_TIMEOUT (600s default) since Ollama CPU inference is slow.
+    POST JSON to :8004/generate-questions -> returns generated legal questions.
+    Uses QUESTIONGEN_TIMEOUT since Ollama CPU inference is slow (~3-8 min).
     Gracefully returns empty result on failure.
     """
     url = f"{settings.QUESTIONGEN_SERVICE_URL}/generate-questions"
@@ -129,17 +173,8 @@ async def generate_questions(case_text: str, laws_text: str, cases_text: str) ->
         "cases": cases_text[:3000],
     }
 
-    # QuestionGen uses Ollama on CPU - needs much longer timeout
-    questiongen_timeout = settings.QUESTIONGEN_TIMEOUT
-
-    logger.info(f"Calling QuestionGen with timeout={questiongen_timeout}s (CPU inference)")
-
     resp = await _request_with_retry(
-        "POST",
-        url,
-        json=json_body,
-        timeout=questiongen_timeout,
-        retries=1,  # Only 1 retry for QuestionGen (each attempt takes ~5 min)
+        "POST", url, json=json_body, timeout=settings.QUESTIONGEN_TIMEOUT
     )
 
     if resp and resp.status_code == 200:
