@@ -1,0 +1,349 @@
+{
+  "info": {
+    "name": "JuriAid - Complete API Collection v2.2",
+    "description": "Full API Collection for all 5 JuriAid Backend Microservices. v2.2: Added case validation, fixed score mapping.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    { "key": "auth_url",         "value": "http://127.0.0.1:8001" },
+    { "key": "pastcase_url",     "value": "http://127.0.0.1:8002" },
+    { "key": "lawstatkg_url",    "value": "http://127.0.0.1:8003" },
+    { "key": "questiongen_url",  "value": "http://127.0.0.1:8004" },
+    { "key": "orchestrator_url", "value": "http://127.0.0.1:8000" },
+    { "key": "token",            "value": "" }
+  ],
+  "item": [
+
+    {
+      "name": "🔐 1. Auth Service (Port 8001)",
+      "item": [
+        {
+          "name": "Root - Health Check",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": { "raw": "{{auth_url}}/", "host": ["{{auth_url}}"], "path": [""] }
+          }
+        },
+        {
+          "name": "Signup - Register New User",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"kumari@juriaid.lk\",\n  \"password\": \"SecurePass@123\",\n  \"full_name\": \"Kumari Silva\",\n  \"phone\": \"+94771234567\"\n}"
+            },
+            "url": { "raw": "{{auth_url}}/auth/signup", "host": ["{{auth_url}}"], "path": ["auth","signup"] }
+          }
+        },
+        {
+          "name": "Login - Get JWT Token",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "var jsonData = pm.response.json();",
+                  "if (jsonData.access_token) {",
+                  "    pm.collectionVariables.set('token', jsonData.access_token);",
+                  "    console.log('Token saved');",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"kumari@juriaid.lk\",\n  \"password\": \"SecurePass@123\"\n}"
+            },
+            "url": { "raw": "{{auth_url}}/auth/login", "host": ["{{auth_url}}"], "path": ["auth","login"] }
+          }
+        },
+        {
+          "name": "Verify Token",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "url": { "raw": "{{auth_url}}/auth/verify", "host": ["{{auth_url}}"], "path": ["auth","verify"] }
+          }
+        },
+        {
+          "name": "Get My Profile",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "url": { "raw": "{{auth_url}}/auth/me", "host": ["{{auth_url}}"], "path": ["auth","me"] }
+          }
+        },
+        {
+          "name": "Logout",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "url": { "raw": "{{auth_url}}/auth/logout", "host": ["{{auth_url}}"], "path": ["auth","logout"] }
+          }
+        }
+      ]
+    },
+
+    {
+      "name": "📂 2. Past Case Retrieval (Port 8002)",
+      "item": [
+        {
+          "name": "Root Status",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": { "raw": "{{pastcase_url}}/", "host": ["{{pastcase_url}}"], "path": [""] }
+          }
+        },
+        {
+          "name": "Database Health Check",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": { "raw": "{{pastcase_url}}/health", "host": ["{{pastcase_url}}"], "path": ["health"] }
+          }
+        },
+        {
+          "name": "Search Similar Past Cases",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                { "key": "file", "type": "file", "src": "", "description": "Upload new legal case PDF" }
+              ]
+            },
+            "url": { "raw": "{{pastcase_url}}/search", "host": ["{{pastcase_url}}"], "path": ["search"] }
+          }
+        },
+        {
+          "name": "Admin - Upload Case PDF to KG",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                { "key": "file", "type": "file", "src": "", "description": "Upload Sri Lankan legal case PDF" }
+              ]
+            },
+            "url": { "raw": "{{pastcase_url}}/admin/upload-case", "host": ["{{pastcase_url}}"], "path": ["admin","upload-case"] }
+          }
+        },
+        {
+          "name": "Get Case by ID",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": { "raw": "{{pastcase_url}}/case/550e8400-e29b-41d4-a716-446655440000", "host": ["{{pastcase_url}}"], "path": ["case","550e8400-e29b-41d4-a716-446655440000"] }
+          }
+        }
+      ]
+    },
+
+    {
+      "name": "⚖️ 3. LawStatKG (Port 8003)",
+      "item": [
+        {
+          "name": "Health Check",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": { "raw": "{{lawstatkg_url}}/health", "host": ["{{lawstatkg_url}}"], "path": ["health"] }
+          }
+        },
+        {
+          "name": "Case Laws - Upload PDF",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                { "key": "file", "type": "file", "src": "", "description": "Upload case PDF to extract applicable laws" },
+                { "key": "as_of_date", "value": "today", "type": "text" }
+              ]
+            },
+            "url": { "raw": "{{lawstatkg_url}}/case/laws", "host": ["{{lawstatkg_url}}"], "path": ["case","laws"] }
+          }
+        },
+        {
+          "name": "Law Search",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"query\": \"divorce adultery desertion Sri Lanka\",\n  \"jurisdiction\": null,\n  \"as_of_date\": null,\n  \"bm25_candidates\": 80,\n  \"alpha\": 0.65,\n  \"beta\": 0.35,\n  \"min_match_ratio\": 0.5,\n  \"min_semantic_cosine\": 0.20\n}"
+            },
+            "url": { "raw": "{{lawstatkg_url}}/Lawsearch", "host": ["{{lawstatkg_url}}"], "path": ["Lawsearch"] }
+          }
+        },
+        {
+          "name": "Get Statute by Act ID",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": { "raw": "{{lawstatkg_url}}/statute/MCO_1907?date=today", "host": ["{{lawstatkg_url}}"], "path": ["statute","MCO_1907"], "query": [{ "key": "date", "value": "today" }] }
+          }
+        }
+      ]
+    },
+
+    {
+      "name": "❓ 4. Question Generator (Port 8004)",
+      "item": [
+        {
+          "name": "Generate Legal Questions",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"case_text\": \"The petitioner Kumari Silva married the respondent Nimal Silva on 15th March 2018 at Colombo District Court. The respondent has been guilty of adultery since January 2022 and abandoned the matrimonial home in June 2023.\",\n  \"law\": \"Matrimonial Causes Ordinance No. 15 of 1907 - Section 19 Adultery, Section 20 Desertion.\",\n  \"cases\": \"Fernando v Fernando (2019) - divorce on adultery and desertion grounds.\"\n}"
+            },
+            "url": { "raw": "{{questiongen_url}}/generate-questions", "host": ["{{questiongen_url}}"], "path": ["generate-questions"] }
+          }
+        }
+      ]
+    },
+
+    {
+      "name": "🎯 5. Orchestrator - MAIN (Port 8000)",
+      "item": [
+        {
+          "name": "Health Check",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": { "raw": "{{orchestrator_url}}/health", "host": ["{{orchestrator_url}}"], "path": ["health"] }
+          }
+        },
+        {
+          "name": "Analyze Case - Full Pipeline",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                { "key": "file", "type": "file", "src": "", "description": "Sri Lankan divorce case PDF. Max 10MB." },
+                { "key": "prompt", "value": "Analyze this Sri Lankan divorce case", "type": "text" }
+              ]
+            },
+            "url": { "raw": "{{orchestrator_url}}/api/analyze", "host": ["{{orchestrator_url}}"], "path": ["api","analyze"] },
+            "description": "Full analysis pipeline. Validates PDF is a divorce case first."
+          },
+          "response": [
+            {
+              "name": "Success 200", "status": "OK", "code": 200,
+              "body": "{ \"analysis_id\": \"...\", \"status\": \"completed\", \"case_summary\": \"## Case Overview\\n...\", \"similar_cases\": [...], \"relevant_laws\": [...], \"generated_questions\": [...] }"
+            },
+            {
+              "name": "Invalid Case Type 422", "status": "Unprocessable Entity", "code": 422,
+              "body": "{\n  \"detail\": {\n    \"error\": \"Invalid case type\",\n    \"message\": \"This document does not appear to be a Sri Lankan divorce or matrimonial case.\",\n    \"matched_keywords\": 1,\n    \"hint\": \"Please upload a Sri Lankan divorce plaint, answer, or judgment PDF.\"\n  }\n}"
+            },
+            {
+              "name": "Not PDF 400", "status": "Bad Request", "code": 400,
+              "body": "{ \"detail\": \"Only PDF files accepted\" }"
+            },
+            {
+              "name": "File Too Large 413", "status": "Request Entity Too Large", "code": 413,
+              "body": "{ \"detail\": \"File too large (11.2MB). Max: 10MB\" }"
+            }
+          ]
+        },
+        {
+          "name": "Analyze Case - With Save Intent",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                { "key": "file", "type": "file", "src": "" },
+                { "key": "prompt", "value": "Analyze this divorce case and save it for future reference", "type": "text" }
+              ]
+            },
+            "url": { "raw": "{{orchestrator_url}}/api/analyze", "host": ["{{orchestrator_url}}"], "path": ["api","analyze"] }
+          }
+        },
+        {
+          "name": "Save Case Only (No Analysis)",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                { "key": "file", "type": "file", "src": "" }
+              ]
+            },
+            "url": { "raw": "{{orchestrator_url}}/api/cases/save", "host": ["{{orchestrator_url}}"], "path": ["api","cases","save"] }
+          }
+        }
+      ]
+    },
+
+    {
+      "name": "🔗 6. End-to-End Full Flow",
+      "item": [
+        {
+          "name": "Step 1 - Register User",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"email\": \"lawyer@juriaid.lk\",\n  \"password\": \"LawyerPass@123\",\n  \"full_name\": \"Janaka Perera\",\n  \"phone\": \"+94712345678\"\n}" },
+            "url": { "raw": "{{auth_url}}/auth/signup", "host": ["{{auth_url}}"], "path": ["auth","signup"] }
+          }
+        },
+        {
+          "name": "Step 2 - Login Get Token",
+          "event": [{ "listen": "test", "script": { "exec": [ "var j=pm.response.json(); if(j.access_token) pm.collectionVariables.set('token',j.access_token);" ] } }],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"email\": \"lawyer@juriaid.lk\",\n  \"password\": \"LawyerPass@123\"\n}" },
+            "url": { "raw": "{{auth_url}}/auth/login", "host": ["{{auth_url}}"], "path": ["auth","login"] }
+          }
+        },
+        {
+          "name": "Step 3 - Orchestrator Health",
+          "request": { "method": "GET", "header": [], "url": { "raw": "{{orchestrator_url}}/health", "host": ["{{orchestrator_url}}"], "path": ["health"] } }
+        },
+        {
+          "name": "Step 4 - Upload Past Case to KG",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "body": { "mode": "formdata", "formdata": [{ "key": "file", "type": "file", "src": "" }] },
+            "url": { "raw": "{{pastcase_url}}/admin/upload-case", "host": ["{{pastcase_url}}"], "path": ["admin","upload-case"] }
+          }
+        },
+        {
+          "name": "Step 5 - Full Case Analysis",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                { "key": "file", "type": "file", "src": "" },
+                { "key": "prompt", "value": "Analyze this Sri Lankan divorce case thoroughly", "type": "text" }
+              ]
+            },
+            "url": { "raw": "{{orchestrator_url}}/api/analyze", "host": ["{{orchestrator_url}}"], "path": ["api","analyze"] }
+          }
+        }
+      ]
+    }
+
+  ]
+}
