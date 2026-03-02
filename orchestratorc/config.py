@@ -25,9 +25,17 @@ class Settings:
     # Gemini
     GEMINI_API_KEY: str = os.getenv("GEMINI_API_KEY", "")
 
+    # Redis (long-term memory)
+    REDIS_URL: str = os.getenv("REDIS_URL", "redis://localhost:6379")
+    REDIS_ENABLED: bool = os.getenv("REDIS_ENABLED", "false").lower() == "true"
+
     # Limits
     MAX_FILE_SIZE_MB: int = int(os.getenv("MAX_FILE_SIZE_MB", "10"))
     SERVICE_TIMEOUT: float = float(os.getenv("SERVICE_TIMEOUT", "120"))
+
+    # Retry
+    MAX_RETRIES: int = int(os.getenv("MAX_RETRIES", "2"))
+    RETRY_DELAY: float = float(os.getenv("RETRY_DELAY", "1.0"))
 
 
 @lru_cache()

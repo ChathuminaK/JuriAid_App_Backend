@@ -3,390 +3,241 @@ JuriAid Case Analysis Pipeline - v2.1 (Resilient)
 """
 
 import asyncio
-import uuid
 import time
-import re
+import uuid
 import logging
-from datetime import datetime, timezone
-from typing import Any, List, Optional
+from typing import Optional
 
 from orchestrator.pdf_extractor import extract_text_from_pdf
-from orchestrator.agent import summarize_case, synthesize_analysis
 from orchestrator.service_clients import (
-    past_case_client,
-    lawstatkg_client,
-    questiongen_client,
-    ServiceError,
+    search_similar_cases,
+    get_applicable_laws,
+    generate_questions,
+    upload_case_to_kg,
+)
+from orchestrator.agent import (
+    detect_user_intent,
+    generate_case_summary,
+    synthesize_analysis,
+)
+from orchestrator.memory_manager import (
+    save_conversation,
+    get_conversation_history,
 )
 from orchestrator.schemas import (
-    CaseAnalysisResponse,
+    AnalysisResponse,
+    AnalysisMetadata,
     SimilarCase,
     RelevantLaw,
     GeneratedQuestion,
 )
 
-logger = logging.getLogger("pipeline")
-logger.setLevel(logging.INFO)
+logger = logging.getLogger(__name__)
 
 
-class CaseAnalysisPipeline:
+def _format_cases_text(cases_data: dict) -> str:
+    """Format similar cases into text for LLM context."""
+    cases = cases_data.get("similar_cases", [])
+    if not cases:
+        return "No similar past cases found."
 
-    async def analyze(
-        self,
-        file_bytes: bytes,
-        filename: str,
-        user_prompt: str = "Analyze this case",
-        save_for_reference: bool = False,
-        user_id: Optional[int] = None,
-    ) -> CaseAnalysisResponse:
+    parts = []
+    for c in cases[:5]:  # Max 5
+        name = c.get("case_name", "Unknown")
+        complaint = c.get("complaint", "N/A")
+        defense = c.get("defense", "N/A")
+        score = c.get("score", 0)
+        parts.append(f"- {name} (similarity: {score:.2f}): Complaint: {complaint} | Defense: {defense}")
 
-        analysis_id = str(uuid.uuid4())
-        start = time.time()
-        logger.info(f"🚀 Pipeline START | id={analysis_id} | file={filename}")
+    return "\n".join(parts)
 
-        # Step 1: Extract text
-        logger.info("📄 Step 1: Extracting text from PDF...")
-        case_text = extract_text_from_pdf(file_bytes)
 
-        # Steps 2+3+4: Parallel
-        logger.info("🔄 Steps 2-4: Parallel retrieval + summarization...")
-        results = await asyncio.gather(
-            self._search_past_cases(file_bytes, filename),
-            self._search_laws(file_bytes, filename),
-            self._summarize(case_text, user_prompt),
-            return_exceptions=True,
-        )
+def _format_laws_text(laws_data: dict) -> str:
+    """Format applicable laws into text for LLM context."""
+    laws = laws_data.get("applicable_laws", [])
+    if not laws:
+        return "No applicable laws retrieved."
 
-        cases_raw = self._safe_result(results[0], "PastCase")
-        laws_raw = self._safe_result(results[1], "LawStatKG")
-        summary = self._safe_result(results[2], "Summary")
+    parts = []
+    for law in laws[:10]:  # Max 10
+        title = law.get("title", "Unknown")
+        section = law.get("section", "")
+        content = law.get("content", "")
+        parts.append(f"- {title} {section}: {content}")
 
-        # Log what we got
-        logger.info(f"📊 PastCase raw: {type(cases_raw).__name__} | keys={list(cases_raw.keys()) if isinstance(cases_raw, dict) else 'N/A'}")
-        logger.info(f"📊 LawStatKG raw: {type(laws_raw).__name__} | keys={list(laws_raw.keys()) if isinstance(laws_raw, dict) else 'N/A'}")
-        logger.info(f"📊 Summary: {'OK (' + str(len(summary)) + ' chars)' if isinstance(summary, str) and summary else 'FAILED'}")
+    return "\n".join(parts)
 
-        # Fallback summary
-        if not summary or not isinstance(summary, str):
-            logger.warning("⚠️ Gemini summary failed, using extracted text")
-            summary = case_text[:3000]
 
-        # Step 5: Generate questions
-        logger.info("❓ Step 5: Generating legal questions...")
-        laws_text = self._format_laws_text(laws_raw)
-        cases_text = self._format_cases_text(cases_raw)
+def _parse_similar_cases(cases_data: dict) -> list[SimilarCase]:
+    """Parse raw cases data into schema objects."""
+    result = []
+    for c in cases_data.get("similar_cases", []):
+        result.append(SimilarCase(
+            case_id=str(c.get("case_id", "")),
+            case_name=str(c.get("case_name", "")),
+            score=float(c.get("score", 0)),
+            complaint=str(c.get("complaint", "")),
+            defense=str(c.get("defense", "")),
+        ))
+    return result
 
-        qgen_input = summary if len(summary) > 500 else case_text[:5000]
-        questions_raw = await self._generate_questions(qgen_input, laws_text, cases_text)
 
-        # Step 6: Synthesis
-        logger.info("🧠 Step 6: Agent synthesizing final analysis...")
-        questions_text = self._format_questions_text(questions_raw)
+def _parse_relevant_laws(laws_data: dict) -> list[RelevantLaw]:
+    """Parse raw laws data into schema objects."""
+    result = []
+    for law in laws_data.get("applicable_laws", []):
+        result.append(RelevantLaw(
+            act_id=str(law.get("act_id", "")),
+            title=str(law.get("title", "")),
+            section=str(law.get("section", "")),
+            relevance_score=float(law.get("relevance_score", 0)),
+            content=str(law.get("content", "")),
+        ))
+    return result
 
+
+def _parse_questions(questions_data: dict) -> list[GeneratedQuestion]:
+    """Parse raw questions string into schema objects."""
+    raw = questions_data.get("questions", "")
+    if not raw:
+        return []
+
+    questions = []
+    for i, line in enumerate(raw.strip().split("\n"), start=1):
+        line = line.strip()
+        if line and len(line) > 3:
+            # Remove leading number/bullet
+            clean = line.lstrip("0123456789.-) ").strip()
+            if clean:
+                questions.append(GeneratedQuestion(question_id=i, question=clean))
+
+    return questions
+
+
+async def run_analysis_pipeline(
+    pdf_bytes: bytes,
+    filename: str,
+    user_prompt: str,
+    user_id: int,
+    session_id: Optional[str] = None,
+) -> AnalysisResponse:
+    """
+    Main orchestration pipeline.
+
+    Steps:
+      1. Extract text from PDF (local)
+      2. Detect user intent via LLM (should save? focus?)
+      3. Parallel: search past cases + get applicable laws + generate case summary
+      4. Sequential: generate questions (needs case text + laws + cases)
+      5. Final synthesis via LLM
+      6. If intent says save → upload to KG (fire-and-forget)
+      7. Save to memory
+
+    Graceful degradation: if any service fails, pipeline continues with partial results.
+    """
+    start_time = time.time()
+    analysis_id = str(uuid.uuid4())
+    session_id = session_id or analysis_id
+
+    logger.info(f"[{analysis_id}] Starting analysis pipeline for '{filename}'")
+
+    # --- Step 1: Extract PDF text ---
+    logger.info(f"[{analysis_id}] Step 1: Extracting PDF text")
+    case_text = extract_text_from_pdf(pdf_bytes)
+
+    if not case_text:
+        logger.warning(f"[{analysis_id}] No text extracted from PDF")
+        case_text = "(No text could be extracted from the uploaded PDF document)"
+
+    file_size_mb = round(len(pdf_bytes) / (1024 * 1024), 2)
+
+    # --- Step 2: Detect user intent ---
+    logger.info(f"[{analysis_id}] Step 2: Detecting user intent")
+    intent = await detect_user_intent(user_prompt)
+    should_save = intent.get("should_save_case", False)
+    logger.info(f"[{analysis_id}] Intent: save={should_save}, focus={intent.get('analysis_focus')}")
+
+    # --- Step 3: Get conversation history for context ---
+    conversation_history = get_conversation_history(session_id)
+
+    # Save user message to memory
+    save_conversation(session_id, "user", f"[File: {filename}] {user_prompt}")
+
+    # --- Step 4: Parallel calls - past cases + laws ---
+    logger.info(f"[{analysis_id}] Step 3-4: Parallel service calls")
+
+    cases_task = search_similar_cases(pdf_bytes, filename)
+    laws_task = get_applicable_laws(pdf_bytes, filename)
+
+    cases_data, laws_data = await asyncio.gather(
+        cases_task, laws_task, return_exceptions=True
+    )
+
+    # Handle exceptions from gather
+    if isinstance(cases_data, Exception):
+        logger.error(f"[{analysis_id}] Past case search exception: {cases_data}")
+        cases_data = {"similar_cases": [], "new_case_id": ""}
+
+    if isinstance(laws_data, Exception):
+        logger.error(f"[{analysis_id}] Law search exception: {laws_data}")
+        laws_data = {"applicable_laws": []}
+
+    # Format for LLM context
+    cases_text = _format_cases_text(cases_data)
+    laws_text = _format_laws_text(laws_data)
+
+    # --- Step 5: Generate case summary via LLM ---
+    logger.info(f"[{analysis_id}] Step 5: Generating case summary via LLM")
+    case_summary = await generate_case_summary(
+        case_text=case_text,
+        user_prompt=user_prompt,
+        similar_cases_text=cases_text,
+        laws_text=laws_text,
+        conversation_history=conversation_history,
+    )
+
+    # --- Step 6: Generate questions (sequential - needs context from above) ---
+    logger.info(f"[{analysis_id}] Step 6: Generating legal questions")
+    questions_data = await generate_questions(case_text, laws_text, cases_text)
+
+    # --- Step 7: Final synthesis ---
+    logger.info(f"[{analysis_id}] Step 7: Final synthesis")
+    raw_questions = questions_data.get("questions", "")
+    final_summary = await synthesize_analysis(case_summary, raw_questions, user_prompt)
+
+    # --- Step 8: Dynamic save decision ---
+    saved_for_reference = False
+    if should_save:
+        logger.info(f"[{analysis_id}] Step 8: User intent detected - saving case to KG")
         try:
-            enriched_summary = await synthesize_analysis(
-                summary=summary,
-                similar_cases_text=cases_text,
-                laws_text=laws_text,
-                questions_text=questions_text,
-            )
+            save_result = await upload_case_to_kg(pdf_bytes, filename)
+            saved_for_reference = bool(save_result.get("case_id"))
+            if saved_for_reference:
+                logger.info(f"[{analysis_id}] Case saved: {save_result.get('case_id')}")
         except Exception as e:
-            logger.warning(f"⚠️ Synthesis failed: {e}")
-            enriched_summary = summary
+            logger.error(f"[{analysis_id}] Case save failed (non-blocking): {e}")
 
-        # Step 7: Optional save
-        if save_for_reference:
-            logger.info("💾 Step 7: Saving case...")
-            await self._save_case(file_bytes, filename)
+    # --- Save assistant response to memory ---
+    save_conversation(session_id, "assistant", final_summary[:2000])
 
-        elapsed = round(time.time() - start, 2)
-        logger.info(f"✅ Pipeline DONE in {elapsed}s | id={analysis_id}")
+    # --- Build response ---
+    processing_time = round(time.time() - start_time, 2)
+    logger.info(f"[{analysis_id}] Pipeline completed in {processing_time}s")
 
-        return CaseAnalysisResponse(
-            analysis_id=analysis_id,
-            status="completed",
-            case_summary=enriched_summary,
-            similar_cases=self._parse_cases(cases_raw),
-            relevant_laws=self._parse_laws(laws_raw),
-            generated_questions=self._parse_questions(questions_raw),
-            metadata={
-                "filename": filename,
-                "file_size_mb": round(len(file_bytes) / (1024 * 1024), 2),
-                "text_length": len(case_text),
-                "user_id": user_id,
-                "user_prompt": user_prompt,
-                "saved_for_reference": save_for_reference,
-            },
-            created_at=datetime.now(timezone.utc),
-            processing_time_seconds=elapsed,
-        )
-
-    # ── Microservice calls ────────────────────────────────
-
-    async def _search_past_cases(self, file_bytes: bytes, filename: str) -> Any:
-        try:
-            return await past_case_client.search_similar(file_bytes, filename)
-        except ServiceError as e:
-            logger.warning(f"⚠️ PastCase failed: {e.detail}")
-            return None
-
-    async def _search_laws(self, file_bytes: bytes, filename: str) -> Any:
-        try:
-            return await lawstatkg_client.get_case_laws(file_bytes, filename)
-        except ServiceError as e:
-            logger.warning(f"⚠️ LawStatKG failed: {e.detail}")
-            return None
-
-    async def _summarize(self, case_text: str, user_prompt: str) -> str:
-        try:
-            return await summarize_case(case_text, user_prompt)
-        except Exception as e:
-            logger.warning(f"⚠️ Summary failed: {e}")
-            return None
-
-    async def _generate_questions(self, summary: str, laws: str, cases: str) -> Any:
-        try:
-            return await questiongen_client.generate(summary, laws, cases)
-        except ServiceError as e:
-            logger.warning(f"⚠️ QuestionGen failed: {e.detail}")
-            return None
-
-    async def _save_case(self, file_bytes: bytes, filename: str) -> None:
-        try:
-            await past_case_client.save_case(file_bytes, filename)
-            logger.info("💾 Case saved to Knowledge Graph")
-        except ServiceError as e:
-            logger.warning(f"⚠️ Save failed: {e.detail}")
-
-    def _safe_result(self, result: Any, name: str) -> Any:
-        if isinstance(result, Exception):
-            logger.warning(f"⚠️ {name} error: {result}")
-            return None
-        return result
-
-    # ══════════════════════════════════════════════════════
-    #  FORMAT for QuestionGen input
-    # ══════════════════════════════════════════════════════
-
-    def _format_laws_text(self, data: Any) -> str:
-        """Format LawStatKG ACTUAL response → string for QuestionGen.
-
-        ACTUAL LawStatKG response shape:
-        {
-            "personal_law": "General",
-            "relevant_laws": [
-                {
-                    "act_id": "general_marriages_cap131",
-                    "act_title": "An Ordinance to consolidate...",
-                    "section_no": "34",
-                    "section_title": "Solemnization of marriage by minister",
-                    "confidence_score": 0.484,
-                    "evidence_from_case": "...",
-                    ...
-                }
-            ]
-        }
-        """
-        if not data or not isinstance(data, dict):
-            return "No relevant laws retrieved."
-
-        items = (
-            data.get("relevant_laws")
-            or data.get("applicable_laws")
-            or data.get("results")
-            or data.get("laws")
-            or data.get("sections")
-            or []
-        )
-
-        if not items:
-            return "No relevant laws retrieved."
-
-        lines = []
-        for item in items:
-            if not isinstance(item, dict):
-                continue
-
-            title = item.get("act_title") or item.get("title") or item.get("law_name") or item.get("act_id") or ""
-            section = item.get("section_title") or item.get("section") or ""
-            section_no = item.get("section_no") or ""
-            content = item.get("evidence_from_case") or item.get("content") or item.get("description") or ""
-            score = item.get("confidence_score") or item.get("relevance_score") or item.get("score") or ""
-
-            parts = []
-            if title:
-                parts.append(title)
-            if section_no:
-                parts.append(f"Section {section_no}")
-            if section:
-                parts.append(f"({section})")
-            if content:
-                parts.append(f"- {content}")
-            if score:
-                parts.append(f"[confidence: {score}]")
-
-            line = " ".join(parts)
-            if line.strip():
-                lines.append(f"- {line}")
-
-        return "\n".join(lines) if lines else "No relevant laws retrieved."
-
-    def _format_cases_text(self, data: Any) -> str:
-        """Format PastCase ACTUAL response → string for QuestionGen.
-
-        ACTUAL PastCase response shape:
-        {
-            "new_case_id": "...",
-            "similar_cases": [
-                {
-                    "case_id": "...",
-                    "case_name": "Page 1",   ← this is the bug from PastCase
-                    "score": null,
-                    "complaint": null,
-                    "defense": null
-                }
-            ]
-        }
-        """
-        if not data or not isinstance(data, dict):
-            return "No similar past cases retrieved."
-
-        items = (
-            data.get("similar_cases")
-            or data.get("results")
-            or data.get("cases")
-            or []
-        )
-
-        if not items:
-            return "No similar past cases found."
-
-        lines = []
-        for item in items:
-            if not isinstance(item, dict):
-                continue
-
-            name = (
-                item.get("case_name")
-                or item.get("title")
-                or item.get("name")
-                or ""
-            )
-            # Fix "Page 1" or empty names
-            if not name or name.strip().lower().startswith("page"):
-                name = f"Case {item.get('case_id', 'Unknown')}"
-
-            score = item.get("score") or item.get("similarity_score") or ""
-            complaint = item.get("complaint") or item.get("complaint_summary") or ""
-            defense = item.get("defense") or item.get("defense_summary") or ""
-
-            parts = [f"Case: {name}"]
-            if score:
-                parts.append(f"Score: {score}")
-            if complaint:
-                parts.append(f"Complaint: {complaint}")
-            if defense:
-                parts.append(f"Defense: {defense}")
-
-            lines.append(" | ".join(parts))
-
-        return "\n".join(lines) if lines else "No similar cases found."
-
-    def _format_questions_text(self, data: Any) -> str:
-        if not data:
-            return "No questions generated."
-        if isinstance(data, dict):
-            return data.get("questions") or data.get("result") or str(data)
-        return str(data)
-
-    # ══════════════════════════════════════════════════════
-    #  PARSE to schema models
-    # ══════════════════════════════════════════════════════
-
-    def _parse_cases(self, data: Any) -> List[SimilarCase]:
-        if not data or not isinstance(data, dict):
-            return []
-
-        items = data.get("similar_cases") or data.get("results") or data.get("cases") or []
-
-        cases = []
-        for item in items:
-            if not isinstance(item, dict):
-                continue
-
-            name = item.get("case_name") or item.get("title") or item.get("name") or ""
-            if not name or name.strip().lower().startswith("page"):
-                name = f"Case {item.get('case_id', 'Unknown')}"
-
-            cases.append(SimilarCase(
-                case_id=str(item.get("case_id", "")),
-                case_name=name,
-                score=item.get("score") or item.get("similarity_score"),
-                complaint=item.get("complaint") or item.get("complaint_summary"),
-                defense=item.get("defense") or item.get("defense_summary"),
-            ))
-        return cases
-
-    def _parse_laws(self, data: Any) -> List[RelevantLaw]:
-        """Parse LawStatKG ACTUAL response → List[RelevantLaw].
-
-        ACTUAL keys: act_id, act_title, section_no, section_title,
-                     confidence_score, evidence_from_case, jurisdiction
-        """
-        if not data or not isinstance(data, dict):
-            return []
-
-        items = (
-            data.get("relevant_laws")
-            or data.get("applicable_laws")
-            or data.get("results")
-            or data.get("laws")
-            or data.get("sections")
-            or []
-        )
-
-        laws = []
-        for item in items:
-            if not isinstance(item, dict):
-                continue
-            laws.append(RelevantLaw(
-                act_id=item.get("act_id") or item.get("id"),
-                title=item.get("act_title") or item.get("title") or item.get("law_name"),
-                section=item.get("section_no") or item.get("section") or item.get("section_id"),
-                relevance_score=item.get("confidence_score") or item.get("relevance_score") or item.get("score"),
-                content=item.get("section_title") or item.get("content") or item.get("description"),
-            ))
-        return laws
-
-    def _parse_questions(self, data: Any) -> List[GeneratedQuestion]:
-        if not data:
-            return []
-
-        text = ""
-        if isinstance(data, dict):
-            text = data.get("questions") or data.get("result") or str(data)
-        elif isinstance(data, str):
-            text = data
-
-        if not text:
-            return []
-
-        questions = []
-        qid = 0
-
-        for line in text.strip().split("\n"):
-            line = line.strip()
-            if not line:
-                continue
-
-            match = re.match(r"^(?:\d+[\.\)\:\-]|\-|\*)\s*(.+)", line)
-            if match:
-                q_text = match.group(1).strip()
-                if len(q_text) > 10:
-                    qid += 1
-                    questions.append(GeneratedQuestion(
-                        question_id=qid,
-                        question=q_text,
-                    ))
-
-        return questions
+    return AnalysisResponse(
+        analysis_id=analysis_id,
+        status="completed",
+        case_summary=final_summary,
+        similar_cases=_parse_similar_cases(cases_data),
+        relevant_laws=_parse_relevant_laws(laws_data),
+        generated_questions=_parse_questions(questions_data),
+        metadata=AnalysisMetadata(
+            filename=filename,
+            file_size_mb=file_size_mb,
+            text_length=len(case_text),
+            user_id=user_id,
+            user_prompt=user_prompt,
+            saved_for_reference=saved_for_reference,
+        ),
+        processing_time_seconds=processing_time,
+    )
