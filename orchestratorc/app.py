@@ -19,6 +19,8 @@ from auth_middleware import verify_token
 from orchestrator.schemas import AnalysisResponse, CaseSaveResponse, HealthResponse
 from orchestrator.pipeline import run_analysis_pipeline
 from orchestrator.service_clients import upload_case_to_kg
+from orchestrator.pdf_extractor import extract_text_from_pdf
+from orchestrator.case_validator import validate_divorce_case
 
 # ---------- Logging ----------
 logging.basicConfig(
@@ -50,8 +52,6 @@ app.add_middleware(
 
 async def _validate_pdf(file: UploadFile) -> bytes:
     """Validate uploaded file is a proper PDF within size limits."""
-
-    # Check content type
     if file.content_type not in ("application/pdf", "application/octet-stream"):
         if not (file.filename or "").lower().endswith(".pdf"):
             raise HTTPException(
@@ -59,17 +59,14 @@ async def _validate_pdf(file: UploadFile) -> bytes:
                 detail="Only PDF files accepted",
             )
 
-    # Read bytes
     pdf_bytes = await file.read()
 
-    # Check empty
     if not pdf_bytes or len(pdf_bytes) < 100:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="File is empty",
         )
 
-    # Check size
     size_mb = len(pdf_bytes) / (1024 * 1024)
     if size_mb > settings.MAX_FILE_SIZE_MB:
         raise HTTPException(
@@ -77,7 +74,6 @@ async def _validate_pdf(file: UploadFile) -> bytes:
             detail=f"File too large ({size_mb:.1f}MB). Max: {settings.MAX_FILE_SIZE_MB}MB",
         )
 
-    # Basic PDF header check
     if not pdf_bytes[:5] == b"%PDF-":
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -97,41 +93,52 @@ async def health_check():
 
 @app.post("/api/analyze", response_model=AnalysisResponse)
 async def analyze_case(
-    file: UploadFile = File(..., description="Sri Lankan legal case PDF. Max 10MB."),
+    file: UploadFile = File(..., description="Sri Lankan divorce case PDF. Max 10MB."),
     prompt: str = Form(
         default="Analyze this case",
-        description="User prompt - guides analysis focus. Include 'save' to store case for future reference.",
+        description="User prompt for analysis. Include 'save' to store case for future reference.",
     ),
     user: dict = Depends(verify_token),
 ):
     """
     POST /api/analyze - Main analysis pipeline.
 
-    Accepts: file (PDF) + prompt (string)
-    
-    The LLM dynamically detects user intent from the prompt:
-    - "Analyze this divorce case" → analysis only
-    - "Analyze and save this case for future reference" → analysis + save to KG
-
-    Pipeline steps:
-      1. PyMuPDF extract text from PDF
-      2. LLM intent detection from prompt
-      3. Parallel: POST :8002/search + POST :8003/case/laws
-      4. Gemini 2.5 → case summary with legal reasoning
-      5. POST :8004/generate-questions → investigation questions
-      6. Gemini 2.5 → final synthesis
-      7. (if save intent) POST :8002/admin/upload-case
+    Validates the PDF is a Sri Lankan divorce/matrimonial case before processing.
+    The LLM dynamically detects user intent from the prompt.
     """
     logger.info(f"Analyze request from user {user.get('sub')} | file={file.filename}")
 
     try:
+        # Step 1: Validate PDF file (size, format)
         pdf_bytes = await _validate_pdf(file)
 
+        # Step 2: Quick text extraction for validation
+        case_text = extract_text_from_pdf(pdf_bytes)
+
+        # Step 3: Validate this is a Sri Lankan divorce case
+        is_valid, validation_details = validate_divorce_case(case_text)
+        if not is_valid:
+            logger.warning(
+                f"Case validation failed for '{file.filename}': "
+                f"{validation_details.get('reason')}"
+            )
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail={
+                    "error": "Invalid case type",
+                    "message": validation_details.get("reason", ""),
+                    "matched_keywords": validation_details.get("matched_keywords", 0),
+                    "hint": "Please upload a Sri Lankan divorce plaint, answer, or judgment PDF.",
+                },
+            )
+
+        # Step 4: Run full analysis pipeline
         result = await run_analysis_pipeline(
             pdf_bytes=pdf_bytes,
             filename=file.filename or "upload.pdf",
             user_prompt=prompt,
             user_id=user.get("sub", 0),
+            pre_extracted_text=case_text,
         )
 
         return result
@@ -151,10 +158,6 @@ async def save_case(
     file: UploadFile = File(..., description="Legal case PDF to save for future reference"),
     user: dict = Depends(verify_token),
 ):
-    """
-    POST /api/cases/save - Save case PDF to Knowledge Graph without full analysis.
-    Internally calls POST :8002/admin/upload-case.
-    """
     logger.info(f"Save case request from user {user.get('sub')} | file={file.filename}")
 
     try:

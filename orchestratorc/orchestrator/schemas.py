@@ -27,6 +27,8 @@ class SimilarCase(BaseModel):
     case_id: str = ""
     case_name: str = ""
     score: float = 0.0
+    summary: str = ""
+    reason: str = ""
     complaint: str = ""
     defense: str = ""
 

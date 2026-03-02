@@ -1,7 +1,7 @@
 {
   "info": {
-    "name": "JuriAid - Complete API Collection v2.1",
-    "description": "Full API Collection for all 5 JuriAid Backend Microservices. v2.1: Dynamic save intent via LLM, gemini-2.5-flash model.",
+    "name": "JuriAid - Complete API Collection v2.2",
+    "description": "Full API Collection for all 5 JuriAid Backend Microservices. v2.2: Added case validation, fixed score mapping.",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
   "variable": [
@@ -209,8 +209,7 @@
               "mode": "raw",
               "raw": "{\n  \"case_text\": \"The petitioner Kumari Silva married the respondent Nimal Silva on 15th March 2018 at Colombo District Court. The respondent has been guilty of adultery since January 2022 and abandoned the matrimonial home in June 2023.\",\n  \"law\": \"Matrimonial Causes Ordinance No. 15 of 1907 - Section 19 Adultery, Section 20 Desertion.\",\n  \"cases\": \"Fernando v Fernando (2019) - divorce on adultery and desertion grounds.\"\n}"
             },
-            "url": { "raw": "{{questiongen_url}}/generate-questions", "host": ["{{questiongen_url}}"], "path": ["generate-questions"] },
-            "description": "Multi-agent pipeline. Expect ~3-8 min on CPU (Ollama inference)."
+            "url": { "raw": "{{questiongen_url}}/generate-questions", "host": ["{{questiongen_url}}"], "path": ["generate-questions"] }
           }
         }
       ]
@@ -231,49 +230,33 @@
           "name": "Analyze Case - Full Pipeline",
           "request": {
             "method": "POST",
-            "header": [
-              { "key": "Authorization", "value": "Bearer {{token}}" }
-            ],
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
             "body": {
               "mode": "formdata",
               "formdata": [
-                {
-                  "key": "file",
-                  "type": "file",
-                  "src": "",
-                  "description": "Sri Lankan legal case PDF. Max 10MB."
-                },
-                {
-                  "key": "prompt",
-                  "value": "Analyze this Sri Lankan divorce case",
-                  "type": "text",
-                  "description": "User prompt for analysis. Include 'save for reference' to auto-save case to KG."
-                }
+                { "key": "file", "type": "file", "src": "", "description": "Sri Lankan divorce case PDF. Max 10MB." },
+                { "key": "prompt", "value": "Analyze this Sri Lankan divorce case", "type": "text" }
               ]
             },
-            "url": {
-              "raw": "{{orchestrator_url}}/api/analyze",
-              "host": ["{{orchestrator_url}}"],
-              "path": ["api","analyze"]
-            },
-            "description": "POST /api/analyze\n\nMAIN PIPELINE - Requires JWT Bearer token.\nOnly 2 form fields: file (PDF) + prompt (string).\n\nThe LLM dynamically detects user intent from the prompt:\n- 'Analyze this case' → analysis only\n- 'Analyze and save for future reference' → analysis + save to Neo4j KG\n\nPipeline:\n  1. PyMuPDF text extraction\n  2. Gemini 2.5 intent detection\n  3. Parallel: :8002/search + :8003/case/laws\n  4. Gemini 2.5 case summary + reasoning\n  5. :8004/generate-questions (Ollama CPU, ~5 min)\n  6. Gemini 2.5 final synthesis\n  7. (if save intent) :8002/admin/upload-case\n\nExpect ~5-10 min total (QuestionGen is CPU-bound)."
+            "url": { "raw": "{{orchestrator_url}}/api/analyze", "host": ["{{orchestrator_url}}"], "path": ["api","analyze"] },
+            "description": "Full analysis pipeline. Validates PDF is a divorce case first."
           },
           "response": [
             {
-              "name": "Full Analysis Success", "status": "OK", "code": 200,
-              "body": "{\n  \"analysis_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n  \"status\": \"completed\",\n  \"case_summary\": \"## Case Overview\\nKumari Silva v Nimal Silva - Colombo District Court...\\n\\n## Key Facts\\n1. Marriage on 15th March 2018...\\n\\n## Legal Issues Identified\\nAdultery, desertion, domestic violence...\\n\\n## Applicable Legal Framework\\nMatrimonial Causes Ordinance No.15 of 1907...\\n\\n## Analysis Based on Similar Cases\\n...\\n\\n## Preliminary Assessment & Recommendations\\n...\",\n  \"similar_cases\": [\n    {\n      \"case_id\": \"abc-123\",\n      \"case_name\": \"Fernando v Fernando 2019\",\n      \"score\": 0.89,\n      \"complaint\": \"Petitioner sought divorce on grounds of adultery\",\n      \"defense\": \"Respondent denied all allegations\"\n    }\n  ],\n  \"relevant_laws\": [\n    {\n      \"act_id\": \"MCO_1907\",\n      \"title\": \"Matrimonial Causes Ordinance No. 15 of 1907\",\n      \"section\": \"Section 19\",\n      \"relevance_score\": 0.92,\n      \"content\": \"Grounds for divorce based on adultery\"\n    }\n  ],\n  \"generated_questions\": [\n    {\n      \"question_id\": 1,\n      \"question\": \"What evidence exists to prove adultery under Section 19?\"\n    }\n  ],\n  \"metadata\": {\n    \"filename\": \"divorce_case.pdf\",\n    \"file_size_mb\": 0.85,\n    \"text_length\": 4200,\n    \"user_id\": 1,\n    \"user_prompt\": \"Analyze this Sri Lankan divorce case\",\n    \"saved_for_reference\": false\n  },\n  \"created_at\": \"2026-03-02T04:55:00Z\",\n  \"processing_time_seconds\": 320.5\n}"
+              "name": "Success 200", "status": "OK", "code": 200,
+              "body": "{ \"analysis_id\": \"...\", \"status\": \"completed\", \"case_summary\": \"## Case Overview\\n...\", \"similar_cases\": [...], \"relevant_laws\": [...], \"generated_questions\": [...] }"
             },
             {
-              "name": "Not PDF - 400", "status": "Bad Request", "code": 400,
+              "name": "Invalid Case Type 422", "status": "Unprocessable Entity", "code": 422,
+              "body": "{\n  \"detail\": {\n    \"error\": \"Invalid case type\",\n    \"message\": \"This document does not appear to be a Sri Lankan divorce or matrimonial case.\",\n    \"matched_keywords\": 1,\n    \"hint\": \"Please upload a Sri Lankan divorce plaint, answer, or judgment PDF.\"\n  }\n}"
+            },
+            {
+              "name": "Not PDF 400", "status": "Bad Request", "code": 400,
               "body": "{ \"detail\": \"Only PDF files accepted\" }"
             },
             {
-              "name": "File Too Large - 413", "status": "Request Entity Too Large", "code": 413,
+              "name": "File Too Large 413", "status": "Request Entity Too Large", "code": 413,
               "body": "{ \"detail\": \"File too large (11.2MB). Max: 10MB\" }"
-            },
-            {
-              "name": "Unauthorized - 401", "status": "Unauthorized", "code": 401,
-              "body": "{ \"detail\": \"Invalid or expired token\" }"
             }
           ]
         },
@@ -281,60 +264,30 @@
           "name": "Analyze Case - With Save Intent",
           "request": {
             "method": "POST",
-            "header": [
-              { "key": "Authorization", "value": "Bearer {{token}}" }
-            ],
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
             "body": {
               "mode": "formdata",
               "formdata": [
                 { "key": "file", "type": "file", "src": "" },
-                {
-                  "key": "prompt",
-                  "value": "Analyze this divorce case and save it for future reference",
-                  "type": "text",
-                  "description": "Including 'save' triggers dynamic save to Neo4j KG after analysis"
-                }
+                { "key": "prompt", "value": "Analyze this divorce case and save it for future reference", "type": "text" }
               ]
             },
-            "url": {
-              "raw": "{{orchestrator_url}}/api/analyze",
-              "host": ["{{orchestrator_url}}"],
-              "path": ["api","analyze"]
-            },
-            "description": "Same endpoint. The prompt includes 'save for future reference' which triggers LLM to detect save intent and auto-save to KG."
+            "url": { "raw": "{{orchestrator_url}}/api/analyze", "host": ["{{orchestrator_url}}"], "path": ["api","analyze"] }
           }
         },
         {
           "name": "Save Case Only (No Analysis)",
           "request": {
             "method": "POST",
-            "header": [
-              { "key": "Authorization", "value": "Bearer {{token}}" }
-            ],
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
             "body": {
               "mode": "formdata",
               "formdata": [
-                {
-                  "key": "file",
-                  "type": "file",
-                  "src": "",
-                  "description": "Legal case PDF to save. No analysis run."
-                }
+                { "key": "file", "type": "file", "src": "" }
               ]
             },
-            "url": {
-              "raw": "{{orchestrator_url}}/api/cases/save",
-              "host": ["{{orchestrator_url}}"],
-              "path": ["api","cases","save"]
-            },
-            "description": "POST /api/cases/save - Save only, no analysis. Calls :8002/admin/upload-case."
-          },
-          "response": [
-            {
-              "name": "Saved", "status": "OK", "code": 200,
-              "body": "{\n  \"saved\": true,\n  \"case_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n  \"message\": \"Case saved and indexed for future reference\"\n}"
-            }
-          ]
+            "url": { "raw": "{{orchestrator_url}}/api/cases/save", "host": ["{{orchestrator_url}}"], "path": ["api","cases","save"] }
+          }
         }
       ]
     },
@@ -384,21 +337,6 @@
               "formdata": [
                 { "key": "file", "type": "file", "src": "" },
                 { "key": "prompt", "value": "Analyze this Sri Lankan divorce case thoroughly", "type": "text" }
-              ]
-            },
-            "url": { "raw": "{{orchestrator_url}}/api/analyze", "host": ["{{orchestrator_url}}"], "path": ["api","analyze"] }
-          }
-        },
-        {
-          "name": "Step 6 - Analyze + Save for Reference",
-          "request": {
-            "method": "POST",
-            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
-            "body": {
-              "mode": "formdata",
-              "formdata": [
-                { "key": "file", "type": "file", "src": "" },
-                { "key": "prompt", "value": "Analyze this case and save it for future reference", "type": "text" }
               ]
             },
             "url": { "raw": "{{orchestrator_url}}/api/analyze", "host": ["{{orchestrator_url}}"], "path": ["api","analyze"] }
