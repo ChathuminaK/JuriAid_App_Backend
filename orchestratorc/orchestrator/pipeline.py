@@ -1,5 +1,5 @@
 """
-JuriAid Case Analysis Pipeline - v2.1 (Resilient)
+JuriAid Case Analysis Pipeline - v2.2 (Resilient)
 """
 
 import asyncio
@@ -48,7 +48,6 @@ def _format_cases_text(cases_data: dict) -> str:
         reason = c.get("reason", "")
         summary = c.get("summary", "")
 
-        # Use first 300 chars of summary if no complaint/defense
         complaint = c.get("complaint", "")
         if not complaint and summary:
             complaint = summary[:300]
@@ -91,6 +90,46 @@ def _format_laws_text(laws_data: dict) -> str:
     return "\n".join(parts)
 
 
+def _format_laws_for_questions(laws_data: dict) -> str:
+    """Format laws with full details for QuestionGen input."""
+    laws = laws_data.get("applicable_laws", [])
+    if not laws:
+        return "No applicable laws found."
+
+    parts = []
+    for law in laws[:10]:
+        title = law.get("title", "Unknown")
+        section = law.get("section", "")
+        section_title = law.get("section_title", "")
+
+        line = f"- {title}"
+        if section:
+            line += f", Section {section}"
+        if section_title:
+            line += f" ({section_title})"
+        parts.append(line)
+
+    return "\n".join(parts)
+
+
+def _format_cases_for_questions(cases_data: dict) -> str:
+    """Format case summaries for QuestionGen input."""
+    cases = cases_data.get("similar_cases", [])
+    if not cases:
+        return "No similar past cases found."
+
+    parts = []
+    for i, c in enumerate(cases[:5], 1):
+        summary = c.get("summary", "")
+        if summary:
+            parts.append(f"{i}. {summary[:500]}")
+
+    if not parts:
+        return "No similar past cases found."
+
+    return "\n".join(parts)
+
+
 def _parse_similar_cases(cases_data: dict) -> list[SimilarCase]:
     """Parse raw cases data into schema objects."""
     result = []
@@ -119,6 +158,7 @@ def _parse_relevant_laws(laws_data: dict) -> list[RelevantLaw]:
                     act_id=str(law.get("act_id", "")),
                     title=str(law.get("title", "")),
                     section=str(law.get("section", "")),
+                    section_title=str(law.get("section_title", "")),
                     relevance_score=float(law.get("relevance_score", 0)),
                     content=str(law.get("content", "")),
                 )
@@ -217,6 +257,7 @@ async def run_analysis_pipeline(
     laws_count = len(laws_data.get("applicable_laws", []))
     logger.info(f"[{analysis_id}] Service results: {cases_count} cases, {laws_count} laws")
 
+    # Format text for LLM summary context
     cases_text = _format_cases_text(cases_data)
     laws_text = _format_laws_text(laws_data)
 
@@ -230,9 +271,14 @@ async def run_analysis_pipeline(
         conversation_history=conversation_history,
     )
 
-    # --- Step 6: Generate questions ---
+    # --- Step 6: Generate questions via QuestionGen ---
+    # QuestionGen expects: case_text=summary, law=act+section details, cases=past case summaries
     logger.info(f"[{analysis_id}] Step 6: Generating legal questions (may take several minutes)")
-    questions_data = await generate_questions(case_text, laws_text, cases_text)
+
+    q_laws_text = _format_laws_for_questions(laws_data)
+    q_cases_text = _format_cases_for_questions(cases_data)
+
+    questions_data = await generate_questions(case_summary, q_laws_text, q_cases_text)
 
     # --- Step 7: Final synthesis ---
     logger.info(f"[{analysis_id}] Step 7: Final synthesis")

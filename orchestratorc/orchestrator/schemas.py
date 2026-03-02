@@ -37,6 +37,7 @@ class RelevantLaw(BaseModel):
     act_id: str = ""
     title: str = ""
     section: str = ""
+    section_title: str = ""
     relevance_score: float = 0.0
     content: str = ""
 
