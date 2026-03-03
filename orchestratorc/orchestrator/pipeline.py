@@ -223,6 +223,8 @@ async def run_analysis_pipeline(
     logger.info(f"[OrchestratorAgent] ═══════════════════════════════════════════")
     logger.info(f"[OrchestratorAgent] Starting multi-agent pipeline | id={analysis_id}")
     logger.info(f"[OrchestratorAgent] File: {filename} | User: {user_id}")
+    logger.info(f"[OrchestratorAgent] Framework: LangChain + Gemini 2.5 Flash LLM")
+    logger.info(f"[OrchestratorAgent] Architecture: 9 specialized agents coordinated")
     logger.info(f"[OrchestratorAgent] ═══════════════════════════════════════════")
 
     # --- Step 1: PDF Text Extraction ---
@@ -243,12 +245,12 @@ async def run_analysis_pipeline(
     file_size_mb = round(len(pdf_bytes) / (1024 * 1024), 2)
 
     # --- Step 2: Intent Detection Agent ---
-    logger.info(f"[IntentDetectionAgent] Step 2/7: Analyzing user intent via Gemini LLM")
+    logger.info(f"[IntentDetectionAgent] Step 2/7: Analyzing user intent via LangChain → Gemini LLM")
     intent = await detect_user_intent(user_prompt)
     should_save = intent.get("should_save_case", False)
     focus = intent.get("analysis_focus", "general")
     logger.info(
-        f"[IntentDetectionAgent] Result: save={should_save}, focus='{focus}'"
+        f"[IntentDetectionAgent] LangChain agent result: save={should_save}, focus='{focus}'"
     )
 
     # --- Step 3: Memory Agent — Load conversation history ---
@@ -292,8 +294,8 @@ async def run_analysis_pipeline(
     laws_text = _format_laws_text(laws_data)
 
     # --- Step 5: Summary Agent ---
-    logger.info(f"[SummaryAgent] Step 5/7: Generating case analysis via Gemini LLM")
-    logger.info(f"[SummaryAgent] Context: {len(case_text)} chars case text, {cases_count} cases, {laws_count} laws")
+    logger.info(f"[SummaryAgent] Step 5/7: Generating case analysis via LangChain → Gemini LLM agent")
+    logger.info(f"[SummaryAgent] LangChain context injection: {len(case_text)} chars case text, {cases_count} cases, {laws_count} laws")
     case_summary = await generate_case_summary(
         case_text=case_text,
         user_prompt=user_prompt,
@@ -316,7 +318,7 @@ async def run_analysis_pipeline(
     logger.info(f"[QuestionGenAgent] ✓ Generated ~{q_count} investigation questions")
 
     # --- Step 7: Synthesis Agent ---
-    logger.info(f"[SynthesisAgent] Step 7/7: Final report synthesis via Gemini LLM")
+    logger.info(f"[SynthesisAgent] Step 7/7: Final report synthesis via LangChain → Gemini LLM agent")
     raw_questions = questions_data.get("questions", "")
     final_summary = await synthesize_analysis(case_summary, raw_questions, user_prompt)
     logger.info(f"[SynthesisAgent] ✓ Final analysis synthesized ({len(final_summary)} chars)")
@@ -341,9 +343,12 @@ async def run_analysis_pipeline(
     processing_time = round(time.time() - start_time, 2)
 
     logger.info(f"[OrchestratorAgent] ═══════════════════════════════════════════")
-    logger.info(f"[OrchestratorAgent] Pipeline COMPLETED in {processing_time}s")
+    logger.info(f"[OrchestratorAgent] Multi-Agent Pipeline COMPLETED in {processing_time}s")
+    logger.info(f"[OrchestratorAgent]   Agents used: IntentDetection, CaseRetrieval, LawRetrieval,")
+    logger.info(f"[OrchestratorAgent]                Summary, QuestionGen, Synthesis, Memory")
     logger.info(f"[OrchestratorAgent]   Cases: {cases_count} | Laws: {laws_count} | Questions: {q_count}")
     logger.info(f"[OrchestratorAgent]   Saved: {saved_for_reference} | Session: {session_id[:8]}...")
+    logger.info(f"[OrchestratorAgent]   Framework: LangChain | LLM: Gemini 2.5 Flash")
     logger.info(f"[OrchestratorAgent] ═══════════════════════════════════════════")
 
     return AnalysisResponse(

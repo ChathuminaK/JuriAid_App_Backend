@@ -21,6 +21,12 @@ from orchestrator.pipeline import run_analysis_pipeline
 from orchestrator.service_clients import upload_case_to_kg
 from orchestrator.pdf_extractor import extract_text_from_pdf
 from orchestrator.case_validator import validate_divorce_case
+from orchestrator.memory_manager import (
+    save_conversation,
+    get_conversation_history,
+    clear_conversation,
+    get_memory_status,
+)
 
 # ---------- Logging ----------
 logging.basicConfig(
@@ -192,3 +198,33 @@ async def save_case(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail="Service unreachable",
         )
+
+
+# ---------- Memory API Endpoints ----------
+
+@app.get("/api/memory/health")
+async def memory_health(user: dict = Depends(verify_token)):
+    """Check memory system status (Redis + ConversationBuffer)."""
+    logger.info(f"[MemoryAgent] Health check requested by user {user.get('sub', 0)}")
+    status = get_memory_status()
+    return status
+
+
+@app.get("/api/memory/session/{session_id}")
+async def get_session_history(session_id: str, user: dict = Depends(verify_token)):
+    """Get conversation history for a session."""
+    logger.info(f"[MemoryAgent] Get history for session {session_id[:8]}...")
+    history = get_conversation_history(session_id)
+    return {
+        "session_id": session_id,
+        "history": history,
+        "has_history": bool(history),
+    }
+
+
+@app.delete("/api/memory/session/{session_id}")
+async def clear_session_history(session_id: str, user: dict = Depends(verify_token)):
+    """Clear conversation history for a session."""
+    logger.info(f"[MemoryAgent] Clear history for session {session_id[:8]}...")
+    clear_conversation(session_id)
+    return {"session_id": session_id, "cleared": True}

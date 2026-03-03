@@ -200,3 +200,49 @@ def clear_conversation(session_id: str) -> None:
     _long_term_fallback.pop(session_id, None)
 
     logger.info(f"[MemoryAgent] Cleared all memory for session {session_id[:8]}...")
+
+
+def get_memory_status() -> dict:
+    """Get memory system health status."""
+    redis = _get_redis()
+    redis_connected = False
+    redis_info = "disabled"
+
+    if settings.REDIS_ENABLED:
+        if redis:
+            try:
+                redis.ping()
+                redis_connected = True
+                redis_info = "connected"
+            except Exception:
+                redis_info = "connection failed"
+        else:
+            redis_info = "connection failed"
+    else:
+        redis_info = "disabled (using in-memory fallback)"
+
+    short_term_sessions = len(_short_term_store)
+    long_term_sessions = len(_long_term_fallback) if not redis_connected else "stored in Redis"
+
+    logger.info(
+        f"[MemoryAgent] Health: Redis={redis_info}, "
+        f"short-term sessions={short_term_sessions}"
+    )
+
+    return {
+        "memory_system": "hybrid",
+        "short_term": {
+            "type": "ConversationBufferWindow",
+            "framework": "LangChain-compatible",
+            "window_size": settings.SHORT_TERM_WINDOW,
+            "active_sessions": short_term_sessions,
+            "status": "active",
+        },
+        "long_term": {
+            "type": "Redis" if settings.REDIS_ENABLED else "in-memory fallback",
+            "connected": redis_connected,
+            "status": redis_info,
+            "ttl_days": settings.REDIS_TTL_DAYS if settings.REDIS_ENABLED else "N/A",
+            "active_sessions": long_term_sessions,
+        },
+    }

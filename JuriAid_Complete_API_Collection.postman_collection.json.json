@@ -1,7 +1,7 @@
 {
   "info": {
-    "name": "JuriAid - Complete API Collection v2.2",
-    "description": "Full API Collection for all 5 JuriAid Backend Microservices. v2.2: Added case validation, fixed score mapping.",
+    "name": "JuriAid - Complete API Collection v2.3",
+    "description": "Full API Collection for all 5 JuriAid Backend Microservices. v2.3: Added memory endpoints, multi-agent logging, Redis support.",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
   "variable": [
@@ -239,12 +239,12 @@
               ]
             },
             "url": { "raw": "{{orchestrator_url}}/api/analyze", "host": ["{{orchestrator_url}}"], "path": ["api","analyze"] },
-            "description": "Full analysis pipeline. Validates PDF is a divorce case first."
+            "description": "Full multi-agent analysis pipeline via LangChain + Gemini orchestration."
           },
           "response": [
             {
               "name": "Success 200", "status": "OK", "code": 200,
-              "body": "{ \"analysis_id\": \"...\", \"status\": \"completed\", \"case_summary\": \"## Case Overview\\n...\", \"similar_cases\": [...], \"relevant_laws\": [...], \"generated_questions\": [...] }"
+              "body": "{ \"analysis_id\": \"...\", \"status\": \"completed\", \"case_summary\": \"## Case Overview\\n...\", \"similar_cases\": [{\"case_id\":\"\",\"case_name\":\"\",\"score\":0.75,\"summary\":\"\",\"reason\":\"\"}], \"relevant_laws\": [{\"act_id\":\"\",\"title\":\"\",\"section\":\"\",\"section_title\":\"\",\"relevance_score\":0.5,\"content\":\"\"}], \"generated_questions\": [{\"question_id\":1,\"question\":\"...\"}] }"
             },
             {
               "name": "Invalid Case Type 422", "status": "Unprocessable Entity", "code": 422,
@@ -287,6 +287,30 @@
               ]
             },
             "url": { "raw": "{{orchestrator_url}}/api/cases/save", "host": ["{{orchestrator_url}}"], "path": ["api","cases","save"] }
+          }
+        },
+        {
+          "name": "Memory Health Check",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "url": { "raw": "{{orchestrator_url}}/api/memory/health", "host": ["{{orchestrator_url}}"], "path": ["api","memory","health"] }
+          }
+        },
+        {
+          "name": "Get Session History",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "url": { "raw": "{{orchestrator_url}}/api/memory/session/test-session-id", "host": ["{{orchestrator_url}}"], "path": ["api","memory","session","test-session-id"] }
+          }
+        },
+        {
+          "name": "Clear Session History",
+          "request": {
+            "method": "DELETE",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "url": { "raw": "{{orchestrator_url}}/api/memory/session/test-session-id", "host": ["{{orchestrator_url}}"], "path": ["api","memory","session","test-session-id"] }
           }
         }
       ]
