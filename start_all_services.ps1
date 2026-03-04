@@ -24,35 +24,35 @@ $services = @(
         Name = "Auth Service"
         Port = 8001
         Path = Join-Path $ROOT_DIR "auth_service"
-        Command = "uvicorn app:app --reload --port 8001"
+        Command = "uvicorn app:app --reload --host 0.0.0.0 --port 8001"
         Color = "Green"
     },
     @{
         Name = "PastCase Retrieval"
         Port = 8002
         Path = Join-Path $ROOT_DIR "past_case_retrieval"
-        Command = "uvicorn app.main:app --reload --port 8002"
+        Command = "uvicorn app.main:app --reload --host 0.0.0.0 --port 8002"
         Color = "Yellow"
     },
     @{
         Name = "LawStatKG"
         Port = 8003
         Path = Join-Path $ROOT_DIR "LawStatKG\backend"
-        Command = "uvicorn app.api:app --reload --port 8003"
+        Command = "uvicorn app.api:app --reload --host 0.0.0.0 --port 8003"
         Color = "Magenta"
     },
     @{
         Name = "QuestionGen"
         Port = 8004
         Path = Join-Path $ROOT_DIR "questionGen"
-        Command = "uvicorn api:app --reload --port 8004"
+        Command = "uvicorn api:app --reload --host 0.0.0.0 --port 8004"
         Color = "Blue"
     },
     @{
         Name = "Orchestrator"
         Port = 8000
         Path = Join-Path $ROOT_DIR "orchestratorc"
-        Command = "uvicorn app:app --reload --port 8000"
+        Command = "uvicorn app:app --reload --host 0.0.0.0 --port 8000"
         Color = "Cyan"
     }
 )
@@ -133,13 +133,13 @@ foreach ($service in $services) {
 }
 
 # Display API endpoints
-Write-Host "`nAPI Endpoints:" -ForegroundColor Cyan
+Write-Host "`nAPI Endpoints (bound to 0.0.0.0 - accessible from any network interface):" -ForegroundColor Cyan
 Write-Host ("=" * 60) -ForegroundColor Gray
-Write-Host "Auth Service:        http://127.0.0.1:8001" -ForegroundColor Green
-Write-Host "PastCase Retrieval:  http://127.0.0.1:8002" -ForegroundColor Yellow
-Write-Host "LawStatKG:           http://127.0.0.1:8003" -ForegroundColor Magenta
-Write-Host "QuestionGen:         http://127.0.0.1:8004" -ForegroundColor Blue
-Write-Host "Orchestrator (MAIN): http://127.0.0.1:8000" -ForegroundColor Cyan
+Write-Host "Auth Service:        http://0.0.0.0:8001" -ForegroundColor Green
+Write-Host "PastCase Retrieval:  http://0.0.0.0:8002" -ForegroundColor Yellow
+Write-Host "LawStatKG:           http://0.0.0.0:8003" -ForegroundColor Magenta
+Write-Host "QuestionGen:         http://0.0.0.0:8004" -ForegroundColor Blue
+Write-Host "Orchestrator (MAIN): http://0.0.0.0:8000" -ForegroundColor Cyan
 Write-Host ""
 Write-Host "API Docs:" -ForegroundColor Cyan
 Write-Host "  Orchestrator: http://127.0.0.1:8000/docs" -ForegroundColor White
