@@ -5,8 +5,6 @@ services:
     rootDir: auth_service
     buildCommand: pip install -r requirements.txt
     startCommand: uvicorn app:app --host 0.0.0.0 --port $PORT
-    envVars:
-      - fromGroup: juriaid-auth-env
 
   - type: web
     name: juriaid-pastcase-retrieval
@@ -14,8 +12,6 @@ services:
     rootDir: past_case_retrieval
     buildCommand: pip install -r requirements.txt
     startCommand: uvicorn app.main:app --host 0.0.0.0 --port $PORT
-    envVars:
-      - fromGroup: juriaid-pastcase-env
 
   - type: web
     name: juriaid-lawstatkg
@@ -23,8 +19,6 @@ services:
     rootDir: LawStatKG/backend
     buildCommand: pip install -r requirements.txt
     startCommand: uvicorn app.api:app --host 0.0.0.0 --port $PORT
-    envVars:
-      - fromGroup: juriaid-lawstatkg-env
 
   - type: web
     name: juriaid-questiongen
@@ -33,7 +27,8 @@ services:
     buildCommand: pip install -r requirements.txt
     startCommand: uvicorn api:app --host 0.0.0.0 --port $PORT
     envVars:
-      - fromGroup: juriaid-questiongen-env
+      - key: OPENAI_API_KEY
+        sync: false
 
   - type: web
     name: juriaid-orchestrator
