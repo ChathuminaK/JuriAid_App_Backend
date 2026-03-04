@@ -21,6 +21,12 @@ from orchestrator.pipeline import run_analysis_pipeline
 from orchestrator.service_clients import upload_case_to_kg
 from orchestrator.pdf_extractor import extract_text_from_pdf
 from orchestrator.case_validator import validate_divorce_case
+from orchestrator.memory_manager import (
+    save_conversation,
+    get_conversation_history,
+    clear_conversation,
+    get_memory_status,
+)
 
 # ---------- Logging ----------
 logging.basicConfig(
@@ -28,15 +34,15 @@ logging.basicConfig(
     format="%(asctime)s | %(levelname)-7s | %(name)s | %(message)s",
     handlers=[logging.StreamHandler(sys.stdout)],
 )
-logger = logging.getLogger(__name__)
+logger = logging.getLogger("orchestrator_agent")
 
 # ---------- App ----------
 settings = get_settings()
 
 app = FastAPI(
     title="JuriAid Orchestrator",
-    description="Agentic AI Framework - Central coordinator for JuriAid legal analysis system",
-    version="2.0.0",
+    description="Agentic AI Framework - Central multi-agent coordinator for JuriAid legal analysis",
+    version="2.3.0",
 )
 
 app.add_middleware(
@@ -101,26 +107,31 @@ async def analyze_case(
     user: dict = Depends(verify_token),
 ):
     """
-    POST /api/analyze - Main analysis pipeline.
+    POST /api/analyze — Main multi-agent analysis pipeline.
 
-    Validates the PDF is a Sri Lankan divorce/matrimonial case before processing.
-    The LLM dynamically detects user intent from the prompt.
+    Agent Flow:
+      ValidationAgent → OrchestratorAgent → IntentDetectionAgent → MemoryAgent →
+      [CaseRetrievalAgent || LawRetrievalAgent] → SummaryAgent →
+      QuestionGenAgent → SynthesisAgent → MemoryAgent
     """
-    logger.info(f"Analyze request from user {user.get('sub')} | file={file.filename}")
+    user_id = user.get("sub", 0)
+    logger.info(f"[OrchestratorAgent] Received analysis request | user={user_id} | file={file.filename}")
 
     try:
-        # Step 1: Validate PDF file (size, format)
+        # Step 1: Validate PDF file
         pdf_bytes = await _validate_pdf(file)
+        logger.info(f"[OrchestratorAgent] PDF validated ({len(pdf_bytes) / 1024:.1f} KB)")
 
-        # Step 2: Quick text extraction for validation
+        # Step 2: Extract text
+        logger.info(f"[OrchestratorAgent] Extracting text from PDF")
         case_text = extract_text_from_pdf(pdf_bytes)
 
-        # Step 3: Validate this is a Sri Lankan divorce case
+        # Step 3: ValidationAgent — Ensure it's a Sri Lankan divorce case
+        logger.info(f"[ValidationAgent] Validating case type (Sri Lankan divorce only)")
         is_valid, validation_details = validate_divorce_case(case_text)
         if not is_valid:
             logger.warning(
-                f"Case validation failed for '{file.filename}': "
-                f"{validation_details.get('reason')}"
+                f"[ValidationAgent] ✗ Rejected: {validation_details.get('reason')}"
             )
             raise HTTPException(
                 status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
@@ -131,13 +142,17 @@ async def analyze_case(
                     "hint": "Please upload a Sri Lankan divorce plaint, answer, or judgment PDF.",
                 },
             )
+        logger.info(
+            f"[ValidationAgent] ✓ Passed ({validation_details.get('matched_keywords', 0)} keywords, "
+            f"{validation_details.get('strong_matches', 0)} strong indicators)"
+        )
 
-        # Step 4: Run full analysis pipeline
+        # Step 4: Run multi-agent pipeline
         result = await run_analysis_pipeline(
             pdf_bytes=pdf_bytes,
             filename=file.filename or "upload.pdf",
             user_prompt=prompt,
-            user_id=user.get("sub", 0),
+            user_id=user_id,
             pre_extracted_text=case_text,
         )
 
@@ -146,7 +161,7 @@ async def analyze_case(
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"Pipeline failed: {e}", exc_info=True)
+        logger.error(f"[OrchestratorAgent] ✗ Pipeline failed: {e}", exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Analysis pipeline failed: {str(e)}",
@@ -158,7 +173,7 @@ async def save_case(
     file: UploadFile = File(..., description="Legal case PDF to save for future reference"),
     user: dict = Depends(verify_token),
 ):
-    logger.info(f"Save case request from user {user.get('sub')} | file={file.filename}")
+    logger.info(f"[OrchestratorAgent] Save case request | user={user.get('sub')} | file={file.filename}")
 
     try:
         pdf_bytes = await _validate_pdf(file)
@@ -167,6 +182,7 @@ async def save_case(
 
         case_id = result.get("case_id", "")
         if case_id:
+            logger.info(f"[OrchestratorAgent] ✓ Case saved: {case_id[:8]}...")
             return CaseSaveResponse(saved=True, case_id=case_id)
         else:
             raise HTTPException(
@@ -177,8 +193,38 @@ async def save_case(
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"Case save failed: {e}", exc_info=True)
+        logger.error(f"[OrchestratorAgent] ✗ Case save failed: {e}", exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail="Service unreachable",
         )
+
+
+# ---------- Memory API Endpoints ----------
+
+@app.get("/api/memory/health")
+async def memory_health(user: dict = Depends(verify_token)):
+    """Check memory system status (Redis + ConversationBuffer)."""
+    logger.info(f"[MemoryAgent] Health check requested by user {user.get('sub', 0)}")
+    status = get_memory_status()
+    return status
+
+
+@app.get("/api/memory/session/{session_id}")
+async def get_session_history(session_id: str, user: dict = Depends(verify_token)):
+    """Get conversation history for a session."""
+    logger.info(f"[MemoryAgent] Get history for session {session_id[:8]}...")
+    history = get_conversation_history(session_id)
+    return {
+        "session_id": session_id,
+        "history": history,
+        "has_history": bool(history),
+    }
+
+
+@app.delete("/api/memory/session/{session_id}")
+async def clear_session_history(session_id: str, user: dict = Depends(verify_token)):
+    """Clear conversation history for a session."""
+    logger.info(f"[MemoryAgent] Clear history for session {session_id[:8]}...")
+    clear_conversation(session_id)
+    return {"session_id": session_id, "cleared": True}
