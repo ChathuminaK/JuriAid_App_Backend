@@ -1,149 +1,230 @@
-from datetime import datetime
-import os
-from typing import Optional
+"""
+JuriAid Orchestrator API
+========================
+The brain of the JuriAid legal AI system.
 
-from fastapi import FastAPI, UploadFile, File, HTTPException, Request, Form, Depends
-from fastapi.responses import JSONResponse
+Endpoints:
+  GET  /health         → Health check
+  POST /api/analyze    → Full case analysis pipeline
+  POST /api/cases/save → Save case for future reference
+"""
 
-from orchestrator.core import (
-    UPLOADS_DIR,
-    OUTPUTS_DIR,
-    read_input_file,
-    process_single_file,
-    analyze_case_content,
-    generate_legal_summary
+import logging
+import sys
+from fastapi import FastAPI, UploadFile, File, Form, Depends, HTTPException, status
+from fastapi.middleware.cors import CORSMiddleware
+
+from config import get_settings
+from auth_middleware import verify_token
+from orchestrator.schemas import AnalysisResponse, CaseSaveResponse, HealthResponse
+from orchestrator.pipeline import run_analysis_pipeline
+from orchestrator.service_clients import upload_case_to_kg
+from orchestrator.pdf_extractor import extract_text_from_pdf
+from orchestrator.case_validator import validate_divorce_case
+from orchestrator.memory_manager import (
+    save_conversation,
+    get_conversation_history,
+    clear_conversation,
+    get_memory_status,
 )
 
-from orchestrator.agent_gemini import GeminiPlannerAgent
-# from orchestrator.agent_langchain import LangChainPlannerAgent  # COMMENTED OUT - not used
-# TODO: Fix dependency conflicts
+# ---------- Logging ----------
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s | %(levelname)-7s | %(name)s | %(message)s",
+    handlers=[logging.StreamHandler(sys.stdout)],
+)
+logger = logging.getLogger("orchestrator_agent")
 
-from auth_middleware import verify_user_token
-
-# Initialize Gemini agent
-planner_agent = GeminiPlannerAgent(kb_path=os.path.join(OUTPUTS_DIR, "knowledge_base.json"))
+# ---------- App ----------
+settings = get_settings()
 
 app = FastAPI(
-    title="JuriAid Orchestrator API",
-    version="1.0.0",
-    description="Upload Sri Lankan legal case files (PDF/TXT) and get structured analysis."
+    title="JuriAid Orchestrator",
+    description="Agentic AI Framework - Central multi-agent coordinator for JuriAid legal analysis",
+    version="2.3.0",
 )
 
-os.makedirs(UPLOADS_DIR, exist_ok=True)
-os.makedirs(OUTPUTS_DIR, exist_ok=True)
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
-@app.get("/")
-def health():
-    return {
-        "status": "ok",
-        "time": datetime.now().isoformat(),
-        "uploads_dir": UPLOADS_DIR,
-        "outputs_dir": OUTPUTS_DIR,
-        "agent": "gemini-custom"
-    }
 
-# Protected endpoints (require authentication)
-@app.post("/api/upload-case")
-async def upload_case(
-    file: UploadFile = File(...),
-    user: dict = Depends(verify_user_token)
+# ---------- File Validation ----------
+
+async def _validate_pdf(file: UploadFile) -> bytes:
+    """Validate uploaded file is a proper PDF within size limits."""
+    if file.content_type not in ("application/pdf", "application/octet-stream"):
+        if not (file.filename or "").lower().endswith(".pdf"):
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Only PDF files accepted",
+            )
+
+    pdf_bytes = await file.read()
+
+    if not pdf_bytes or len(pdf_bytes) < 100:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="File is empty",
+        )
+
+    size_mb = len(pdf_bytes) / (1024 * 1024)
+    if size_mb > settings.MAX_FILE_SIZE_MB:
+        raise HTTPException(
+            status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+            detail=f"File too large ({size_mb:.1f}MB). Max: {settings.MAX_FILE_SIZE_MB}MB",
+        )
+
+    if not pdf_bytes[:5] == b"%PDF-":
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid PDF file",
+        )
+
+    return pdf_bytes
+
+
+# ---------- Endpoints ----------
+
+@app.get("/health", response_model=HealthResponse)
+async def health_check():
+    """Health check - no auth required."""
+    return HealthResponse()
+
+
+@app.post("/api/analyze", response_model=AnalysisResponse)
+async def analyze_case(
+    file: UploadFile = File(..., description="Sri Lankan divorce case PDF. Max 10MB."),
+    prompt: str = Form(
+        default="Analyze this case",
+        description="User prompt for analysis. Include 'save' to store case for future reference.",
+    ),
+    user: dict = Depends(verify_token),
 ):
-    if not file or not getattr(file, "filename", "").strip():
-        raise HTTPException(status_code=422, detail="Missing file upload (form-data key 'file').")
-    if not file.filename.lower().endswith((".pdf", ".txt")):
-        raise HTTPException(status_code=400, detail="Only PDF or TXT files supported.")
+    """
+    POST /api/analyze — Main multi-agent analysis pipeline.
 
-    data = await file.read()
-    if not data:
-        raise HTTPException(status_code=400, detail="Empty file content.")
+    Agent Flow:
+      ValidationAgent → OrchestratorAgent → IntentDetectionAgent → MemoryAgent →
+      [CaseRetrievalAgent || LawRetrievalAgent] → SummaryAgent →
+      QuestionGenAgent → SynthesisAgent → MemoryAgent
+    """
+    user_id = user.get("sub", 0)
+    logger.info(f"[OrchestratorAgent] Received analysis request | user={user_id} | file={file.filename}")
 
-    ts_name = f"{datetime.now():%Y%m%d_%H%M%S}_{file.filename}"
-    dest = os.path.join(UPLOADS_DIR, ts_name)
-    with open(dest, "wb") as f:
-        f.write(data)
-
-    result = process_single_file(dest)
-    if not result.get("success"):
-        raise HTTPException(status_code=500, detail=result.get("error", "Processing failed"))
-    
-    result["user_id"] = user["user_id"]
-    result["subscription_tier"] = user["subscription_tier"]
-    result["email"] = user["email"]
-    
-    return JSONResponse(result)
-
-@app.post("/api/upload-case-with-prompt")
-async def upload_case_with_prompt(
-    file: UploadFile = File(..., description="PDF or TXT"),
-    prompt: str = Form(..., description="User instruction / extra context"),
-    user: dict = Depends(verify_user_token)
-):
-    if not file.filename.lower().endswith((".pdf", ".txt")):
-        raise HTTPException(status_code=400, detail="Only PDF or TXT files supported.")
-    data = await file.read()
-    if not data:
-        raise HTTPException(status_code=400, detail="Empty file.")
-    ts_name = f"{datetime.now():%Y%m%d_%H%M%S}_{file.filename}"
-    dest = os.path.join(UPLOADS_DIR, ts_name)
-    with open(dest, "wb") as f:
-        f.write(data)
-    result = process_single_file(dest)
-    if not result.get("success"):
-        raise HTTPException(status_code=500, detail=result.get("error"))
-    result["prompt_used"] = prompt
-    result["user_id"] = user["user_id"]
-    return JSONResponse(result)
-
-@app.post("/api/agent/plan-run")
-async def agent_plan_run(
-    file: UploadFile = File(...),
-    prompt: str = Form(...),
-    user: dict = Depends(verify_user_token)
-):
-    """Run AI agent analysis using custom Gemini implementation"""
-    if not file.filename.lower().endswith((".pdf", ".txt")):
-        raise HTTPException(status_code=400, detail="Only PDF or TXT files supported.")
-    data = await file.read()
-    if not data:
-        raise HTTPException(status_code=400, detail="Empty file.")
-    
-    tmp = os.path.join(UPLOADS_DIR, f"{datetime.now():%Y%m%d_%H%M%S}_{file.filename}")
-    with open(tmp, "wb") as f:
-        f.write(data)
-    
-    case_text = read_input_file(tmp)
-    
     try:
-        out = planner_agent.run(case_text, prompt)
-        out["user_id"] = user["user_id"]
-        out["email"] = user["email"]
-        
-        return JSONResponse(out)
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        # Step 1: Validate PDF file
+        pdf_bytes = await _validate_pdf(file)
+        logger.info(f"[OrchestratorAgent] PDF validated ({len(pdf_bytes) / 1024:.1f} KB)")
 
-# Public endpoints (no auth required)
-@app.post("/api/analyze-text")
-async def analyze_text(request: Request):
-    body = await request.json()
-    text = (body.get("text") or "").strip()
-    if not text:
-        raise HTTPException(status_code=400, detail="Text cannot be empty.")
-    analysis = analyze_case_content(text)
-    summary = generate_legal_summary(text, analysis)
+        # Step 2: Extract text
+        logger.info(f"[OrchestratorAgent] Extracting text from PDF")
+        case_text = extract_text_from_pdf(pdf_bytes)
+
+        # Step 3: ValidationAgent — Ensure it's a Sri Lankan divorce case
+        logger.info(f"[ValidationAgent] Validating case type (Sri Lankan divorce only)")
+        is_valid, validation_details = validate_divorce_case(case_text)
+        if not is_valid:
+            logger.warning(
+                f"[ValidationAgent] ✗ Rejected: {validation_details.get('reason')}"
+            )
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail={
+                    "error": "Invalid case type",
+                    "message": validation_details.get("reason", ""),
+                    "matched_keywords": validation_details.get("matched_keywords", 0),
+                    "hint": "Please upload a Sri Lankan divorce plaint, answer, or judgment PDF.",
+                },
+            )
+        logger.info(
+            f"[ValidationAgent] ✓ Passed ({validation_details.get('matched_keywords', 0)} keywords, "
+            f"{validation_details.get('strong_matches', 0)} strong indicators)"
+        )
+
+        # Step 4: Run multi-agent pipeline
+        result = await run_analysis_pipeline(
+            pdf_bytes=pdf_bytes,
+            filename=file.filename or "upload.pdf",
+            user_prompt=prompt,
+            user_id=user_id,
+            pre_extracted_text=case_text,
+        )
+
+        return result
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"[OrchestratorAgent] ✗ Pipeline failed: {e}", exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Analysis pipeline failed: {str(e)}",
+        )
+
+
+@app.post("/api/cases/save", response_model=CaseSaveResponse)
+async def save_case(
+    file: UploadFile = File(..., description="Legal case PDF to save for future reference"),
+    user: dict = Depends(verify_token),
+):
+    logger.info(f"[OrchestratorAgent] Save case request | user={user.get('sub')} | file={file.filename}")
+
+    try:
+        pdf_bytes = await _validate_pdf(file)
+
+        result = await upload_case_to_kg(pdf_bytes, file.filename or "upload.pdf")
+
+        case_id = result.get("case_id", "")
+        if case_id:
+            logger.info(f"[OrchestratorAgent] ✓ Case saved: {case_id[:8]}...")
+            return CaseSaveResponse(saved=True, case_id=case_id)
+        else:
+            raise HTTPException(
+                status_code=status.HTTP_502_BAD_GATEWAY,
+                detail="Case save returned no case_id",
+            )
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"[OrchestratorAgent] ✗ Case save failed: {e}", exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Service unreachable",
+        )
+
+
+# ---------- Memory API Endpoints ----------
+
+@app.get("/api/memory/health")
+async def memory_health(user: dict = Depends(verify_token)):
+    """Check memory system status (Redis + ConversationBuffer)."""
+    logger.info(f"[MemoryAgent] Health check requested by user {user.get('sub', 0)}")
+    status = get_memory_status()
+    return status
+
+
+@app.get("/api/memory/session/{session_id}")
+async def get_session_history(session_id: str, user: dict = Depends(verify_token)):
+    """Get conversation history for a session."""
+    logger.info(f"[MemoryAgent] Get history for session {session_id[:8]}...")
+    history = get_conversation_history(session_id)
     return {
-        "success": True,
-        "case_type": analysis["case_type"],
-        "length": analysis["length"],
-        "preview": text[:500] + ("..." if len(text) > 500 else ""),
-        "summary": summary,
-        "timestamp": datetime.now().isoformat()
+        "session_id": session_id,
+        "history": history,
+        "has_history": bool(history),
     }
 
-@app.exception_handler(HTTPException)
-async def http_exc_handler(_, exc: HTTPException):
-    return JSONResponse(status_code=exc.status_code, content={"success": False, "detail": exc.detail})
 
-@app.exception_handler(Exception)
-async def unhandled(_, exc: Exception):
-    return JSONResponse(status_code=500, content={"success": False, "detail": str(exc)})
+@app.delete("/api/memory/session/{session_id}")
+async def clear_session_history(session_id: str, user: dict = Depends(verify_token)):
+    """Clear conversation history for a session."""
+    logger.info(f"[MemoryAgent] Clear history for session {session_id[:8]}...")
+    clear_conversation(session_id)
+    return {"session_id": session_id, "cleared": True}
