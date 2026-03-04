@@ -3,6 +3,7 @@ services:
     name: juriaid-auth-service
     runtime: python
     rootDir: auth_service
+    plan: free
     buildCommand: pip install -r requirements.txt
     startCommand: uvicorn app:app --host 0.0.0.0 --port $PORT
 
@@ -10,6 +11,7 @@ services:
     name: juriaid-pastcase-retrieval
     runtime: python
     rootDir: past_case_retrieval
+    plan: free
     buildCommand: pip install -r requirements.txt
     startCommand: uvicorn app.main:app --host 0.0.0.0 --port $PORT
 
@@ -17,6 +19,7 @@ services:
     name: juriaid-lawstatkg
     runtime: python
     rootDir: LawStatKG/backend
+    plan: free
     buildCommand: pip install -r requirements.txt
     startCommand: uvicorn app.api:app --host 0.0.0.0 --port $PORT
 
@@ -24,6 +27,7 @@ services:
     name: juriaid-questiongen
     runtime: python
     rootDir: questionGen
+    plan: free
     buildCommand: pip install -r requirements.txt
     startCommand: uvicorn api:app --host 0.0.0.0 --port $PORT
     envVars:
@@ -34,6 +38,7 @@ services:
     name: juriaid-orchestrator
     runtime: python
     rootDir: orchestratorc
+    plan: free
     buildCommand: pip install -r requirements.txt
     startCommand: uvicorn app:app --host 0.0.0.0 --port $PORT
     envVars:
