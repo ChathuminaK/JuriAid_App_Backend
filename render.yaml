@@ -42,4 +42,35 @@ services:
     buildCommand: pip install -r requirements.txt
     startCommand: uvicorn app:app --host 0.0.0.0 --port $PORT
     envVars:
-      - fromGroup: juriaid-orchestrator-env
+      - key: DEBUG
+        value: false
+      - key: AUTH_ENABLED
+        value: false
+      - key: AUTH_SERVICE_URL
+        value: https://juriaid-auth-service.onrender.com
+      - key: PAST_CASE_SERVICE_URL
+        value: https://juriaid-pastcase-retrieval.onrender.com
+      - key: LAWSTATKG_SERVICE_URL
+        value: https://juriaid-lawstatkg.onrender.com
+      - key: QUESTIONGEN_SERVICE_URL
+        value: https://juriaid-questiongen.onrender.com
+      - key: GEMINI_API_KEY
+        sync: false
+      - key: REDIS_ENABLED
+        value: false
+      - key: REDIS_TTL_DAYS
+        value: 7
+      - key: SHORT_TERM_WINDOW
+        value: 5
+      - key: LONG_TERM_MAX_MESSAGES
+        value: 50
+      - key: MAX_FILE_SIZE_MB
+        value: 10
+      - key: SERVICE_TIMEOUT
+        value: 120
+      - key: QUESTIONGEN_TIMEOUT
+        value: 600
+      - key: MAX_RETRIES
+        value: 2
+      - key: RETRY_DELAY
+        value: 1.0
