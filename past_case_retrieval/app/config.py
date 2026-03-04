@@ -3,9 +3,9 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-NEO4J_URI = os.getenv("NEO4J_URI")
-NEO4J_USER = os.getenv("NEO4J_USER")
-NEO4J_PASSWORD = os.getenv("NEO4J_PASSWORD")
+NEO4J_URI = os.getenv("NEO4J__URI")
+NEO4J_USER = os.getenv("NEO4J__USER")
+NEO4J_PASSWORD = os.getenv("NEO4J__PASSWORD")
 
 WEIGHTS = {
     "facts": 0.35,
