@@ -1,8 +1,19 @@
 import re
-from transformers import AutoTokenizer, AutoModel
+from transformers import AutoTokenizer, AutoModelForSequenceClassification
 
 # ✅ DEFINE MODEL NAME FIRST
 MODEL_NAME = "nlpaueb/legal-bert-base-uncased"
+
+# Replace any top-level model loading
+_classifier_model = None
+_tokenizer = None
+
+def get_classifier():
+    global _classifier_model, _tokenizer
+    if _classifier_model is None:
+        _tokenizer = AutoTokenizer.from_pretrained("distilbert-base-uncased")  # lighter
+        _classifier_model = AutoModelForSequenceClassification.from_pretrained("distilbert-base-uncased")
+    return _classifier_model, _tokenizer
 
 # Load tokenizer & model
 tokenizer = AutoTokenizer.from_pretrained(MODEL_NAME)

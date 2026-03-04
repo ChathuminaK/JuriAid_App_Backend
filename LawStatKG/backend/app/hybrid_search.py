@@ -10,7 +10,18 @@ import hashlib
 
 import numpy as np
 from rank_bm25 import BM25Okapi
-from sentence_transformers import SentenceTransformer
+# model = SentenceTransformer("nlpaueb/legal-bert-base-uncased")
+
+# To this (lazy load = only loads when first request comes):
+_model = None
+
+def get_model():
+    global _model
+    if _model is None:
+        from sentence_transformers import SentenceTransformer
+        # Much smaller model ~90MB instead of ~500MB
+        _model = SentenceTransformer("all-MiniLM-L6-v2")
+    return _model
 
 from app.kg_client import KGClient
 
@@ -163,7 +174,7 @@ class HybridSearchEngine:
         section_tokens = [tokenize(t) for t in section_texts]
         bm25 = BM25Okapi(section_tokens)
 
-        model = SentenceTransformer(self.model_name)
+        model = get_model()
         emb = model.encode(
             section_texts,
             convert_to_numpy=True,
@@ -228,7 +239,7 @@ class HybridSearchEngine:
 
         # model for query embeddings
         # (this is much faster than embedding the whole corpus)
-        self.model = SentenceTransformer(self.model_name)
+        self.model = get_model()
 
         # act expansion maps
         self.act_to_sections.clear()
