@@ -1,76 +1,51 @@
-import re
-from transformers import AutoTokenizer, AutoModelForSequenceClassification
+import os
+import logging
+import torch
+import torch.nn.functional as F
+from transformers import AutoTokenizer, AutoModel
 
-# ✅ DEFINE MODEL NAME FIRST
-MODEL_NAME = "nlpaueb/legal-bert-base-uncased"
+logger = logging.getLogger(__name__)
 
-# Replace any top-level model loading
-_classifier_model = None
+MODEL_NAME = os.getenv("LEGALBERT_MODEL", "nlpaueb/legal-bert-base-uncased")
+
+# Lazy load to avoid OOM on free tier
 _tokenizer = None
+_model = None
 
-def get_classifier():
-    global _classifier_model, _tokenizer
-    if _classifier_model is None:
-        _tokenizer = AutoTokenizer.from_pretrained("distilbert-base-uncased")  # lighter
-        _classifier_model = AutoModelForSequenceClassification.from_pretrained("distilbert-base-uncased")
-    return _classifier_model, _tokenizer
+def _load_model():
+    global _tokenizer, _model
+    if _model is None:
+        logger.info(f"Loading LegalBERT model: {MODEL_NAME}")
+        _tokenizer = AutoTokenizer.from_pretrained(MODEL_NAME)
+        _model = AutoModel.from_pretrained(MODEL_NAME)
+        _model.eval()
+        logger.info("LegalBERT model loaded successfully")
 
-# Load tokenizer & model
-tokenizer = AutoTokenizer.from_pretrained(MODEL_NAME)
-model = AutoModel.from_pretrained(MODEL_NAME)
+def get_embedding(text: str):
+    _load_model()
+    inputs = _tokenizer(text, return_tensors="pt", truncation=True, max_length=512, padding=True)
+    with torch.no_grad():
+        outputs = _model(**inputs)
+    # Use CLS token embedding
+    embedding = outputs.last_hidden_state[:, 0, :].squeeze()
+    return embedding
 
-model.eval()
-
-
-def classify_sentence(sentence: str):
-
-    sentence_lower = sentence.lower()
-
-    if any(x in sentence_lower for x in [
-        "appeal dismissed",
-        "conviction upheld",
-        "ordered that",
-        "held that",
-        "accordingly",
-        "therefore"
-    ]):
-        return "decisions"
-
-    if any(x in sentence_lower for x in [
-        "issue is",
-        "question is",
-        "whether",
-        "for determination"
-    ]):
-        return "issues"
-
-    if any(x in sentence_lower for x in [
-        "submitted",
-        "argued",
-        "contended",
-        "counsel"
-    ]):
-        return "arguments"
-
-    return "facts"
-
-
-def classify_text(text: str):
-
-    sentences = re.split(r'(?<=[.!?])\s+', text)
-
-    roles = {
-        "facts": [],
-        "issues": [],
-        "arguments": [],
-        "decisions": []
-    }
-
-    for sentence in sentences:
-        if len(sentence.strip()) < 20:
-            continue
-
-        role = classify_sentence(sentence)
-        roles[role].append(sentence)
-
-    return roles
+def classify_text(text: str, candidate_labels: list[str] = None):
+    """Classify text by computing similarity to candidate labels."""
+    _load_model()
+    text_emb = get_embedding(text)
+    
+    if candidate_labels is None:
+        candidate_labels = ["criminal", "civil", "constitutional", "commercial", "family"]
+    
+    best_label = None
+    best_score = -1.0
+    
+    for label in candidate_labels:
+        label_emb = get_embedding(label)
+        score = F.cosine_similarity(text_emb.unsqueeze(0), label_emb.unsqueeze(0)).item()
+        if score > best_score:
+            best_score = score
+            best_label = label
+    
+    return {"label": best_label, "score": best_score}
