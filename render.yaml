@@ -9,6 +9,11 @@ services:
     envVars:
       - key: PYTHON_VERSION
         value: 3.11.9
+      - key: JWT_SECRET_KEY
+        sync: false
+      - key: DATABASE_URL
+        sync: false
+      # add any other required secrets here
 
   - type: web
     name: juriaid-pastcase-retrieval
