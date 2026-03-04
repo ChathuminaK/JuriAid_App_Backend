@@ -25,6 +25,12 @@ services:
     envVars:
       - key: PYTHON_VERSION
         value: 3.11.9
+      - key: NEO4J__URI
+        sync: false
+      - key: NEO4J__USER
+        sync: false
+      - key: NEO4J__PASSWORD
+        sync: false
 
   - type: web
     name: juriaid-lawstatkg
