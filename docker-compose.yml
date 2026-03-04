@@ -1,0 +1,93 @@
+﻿version: '3.8'
+
+services:
+  redis:
+    image: redis:7-alpine
+    container_name: juriaid_redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    command: redis-server --appendonly yes
+    networks:
+      - juriaid_network
+
+  auth_service:
+    build:
+      context: ./auth_service
+    container_name: juriaid_auth
+    ports:
+      - "8001:8001"
+    environment:
+      - JWT_SECRET_KEY=juriaid-super-secret-key-change-in-production-2026
+      - JWT_ALGORITHM=HS256
+      - DATABASE_URL=sqlite:///./users.db
+      - AUTH_SERVICE_HOST=0.0.0.0
+      - AUTH_SERVICE_PORT=8001
+    volumes:
+      - ./auth_service:/app
+    networks:
+      - juriaid_network
+
+  past_case_service:
+    build:
+      context: ./past_case_retrieval
+    container_name: juriaid_pastcase
+    ports:
+      - "8002:8002"
+    volumes:
+      - ./past_case_retrieval:/app
+    networks:
+      - juriaid_network
+
+  lawstatkg_service:
+    build:
+      context: ./LawStatKG/backend
+    container_name: juriaid_lawstatkg
+    ports:
+      - "8003:8003"
+    volumes:
+      - ./LawStatKG/backend:/app
+    networks:
+      - juriaid_network
+
+  questiongen_service:
+    build:
+      context: ./questionGen
+    container_name: juriaid_questiongen
+    ports:
+      - "8004:8004"
+    volumes:
+      - ./questionGen:/app
+    networks:
+      - juriaid_network
+
+  orchestrator:
+    build:
+      context: ./orchestratorc
+    container_name: juriaid_orchestrator
+    ports:
+      - "8000:8000"
+    environment:
+      - GEMINI_API_KEY=${GEMINI_API_KEY}
+      - AUTH_SERVICE_URL=http://auth_service:8001
+      - LAWSTATKG_SERVICE_URL=http://lawstatkg_service:8003
+      - PAST_CASE_SERVICE_URL=http://past_case_service:8002
+      - QUESTIONGEN_SERVICE_URL=http://questiongen_service:8004
+      - REDIS_URL=redis://redis:6379/0
+      - ORCHESTRATOR_HOST=0.0.0.0
+      - ORCHESTRATOR_PORT=8000
+    volumes:
+      - ./orchestratorc:/app
+    depends_on:
+      - redis
+      - auth_service
+    networks:
+      - juriaid_network
+
+networks:
+  juriaid_network:
+    driver: bridge
+
+volumes:
+  redis_data:
