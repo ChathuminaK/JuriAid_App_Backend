@@ -7,13 +7,26 @@ from datetime import date
 from typing import List, Dict, Optional, DefaultDict
 from collections import defaultdict
 import hashlib
-
 import numpy as np
-from rank_bm25 import BM25Okapi
-# model = SentenceTransformer("nlpaueb/legal-bert-base-uncased")
 
 # To this (lazy load = only loads when first request comes):
-_model = None
+_embeddings = None
+_meta = None
+_sections = None
+
+def get_artifacts():
+    """✅ Lazy load search artifacts"""
+    global _embeddings, _meta, _sections
+    if _embeddings is None:
+        print("⏳ Loading search artifacts...")
+        base = os.path.dirname(os.path.dirname(__file__))
+        _embeddings = np.load(os.path.join(base, "artifacts", "embeddings.npy"))
+        with open(os.path.join(base, "artifacts", "meta.json")) as f:
+            _meta = json.load(f)
+        with open(os.path.join(base, "artifacts", "sections.json")) as f:
+            _sections = json.load(f)
+        print("✅ Artifacts loaded")
+    return _embeddings, _meta, _sections
 
 def get_model():
     global _model

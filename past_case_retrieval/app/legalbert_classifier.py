@@ -9,20 +9,24 @@ logger = logging.getLogger(__name__)
 MODEL_NAME = os.getenv("LEGALBERT_MODEL", "nlpaueb/legal-bert-base-uncased")
 
 # Lazy load to avoid OOM on free tier
-_tokenizer = None
 _model = None
+_tokenizer = None
 
-def _load_model():
-    global _tokenizer, _model
+def get_model():
+    """✅ Lazy load — only load when first request comes in, not at startup"""
+    global _model, _tokenizer
     if _model is None:
-        logger.info(f"Loading LegalBERT model: {MODEL_NAME}")
-        _tokenizer = AutoTokenizer.from_pretrained(MODEL_NAME)
-        _model = AutoModel.from_pretrained(MODEL_NAME)
+        print("⏳ Loading LegalBERT model...")
+        from transformers import AutoTokenizer, AutoModelForSequenceClassification
+        import torch
+        _tokenizer = AutoTokenizer.from_pretrained("nlpaueb/legal-bert-base-uncased")
+        _model = AutoModelForSequenceClassification.from_pretrained("nlpaueb/legal-bert-base-uncased")
         _model.eval()
-        logger.info("LegalBERT model loaded successfully")
+        print("✅ LegalBERT loaded")
+    return _model, _tokenizer
 
 def get_embedding(text: str):
-    _load_model()
+    _model, _tokenizer = get_model()
     inputs = _tokenizer(text, return_tensors="pt", truncation=True, max_length=512, padding=True)
     with torch.no_grad():
         outputs = _model(**inputs)
@@ -32,7 +36,7 @@ def get_embedding(text: str):
 
 def classify_text(text: str, candidate_labels: list[str] = None):
     """Classify text by computing similarity to candidate labels."""
-    _load_model()
+    _model, _tokenizer = get_model()
     text_emb = get_embedding(text)
     
     if candidate_labels is None:
