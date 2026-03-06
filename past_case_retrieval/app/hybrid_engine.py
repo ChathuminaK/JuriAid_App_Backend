@@ -2,9 +2,6 @@ from app.config import WEIGHTS
 from app.neo4j_driver import db
 
 
-# -------------------------------------------------
-# Get shared legal issues between cases
-# -------------------------------------------------
 def get_shared_legal_issues(query_issues, candidate_id):
 
     result = db.query("""
@@ -19,9 +16,6 @@ def get_shared_legal_issues(query_issues, candidate_id):
     return list(set(query_issues) & set(candidate_issues))
 
 
-# -------------------------------------------------
-#Generate clear explanation text
-# -------------------------------------------------
 def generate_reason(breakdown, shared_issues):
 
     reasons = []
@@ -35,7 +29,7 @@ def generate_reason(breakdown, shared_issues):
     if breakdown["arguments"] > 0.75:
         reasons.append("Similar legal reasoning")
 
-    if breakdown.get("decisions", 0) > 0.75:
+    if breakdown["decisions"] > 0.75:
         reasons.append("Similar judicial decision")
 
     if not reasons:
@@ -44,14 +38,10 @@ def generate_reason(breakdown, shared_issues):
     return ". ".join(reasons) + "."
 
 
-# -------------------------------------------------
-#Hybrid Search Function (UPDATED WITH DECISIONS)
-# -------------------------------------------------
 def hybrid_search(embeddings, query_issues):
 
-    # 🔎 Step 1: Vector search based on facts
     vector_query = """
-    CALL db.index.vector.queryNodes('facts_embedding_index', 5, $facts_embedding)
+    CALL db.index.vector.queryNodes('facts_embedding_index', 20, $facts_embedding)
     YIELD node, score
     RETURN node.case_id AS case_id,
            node.case_name AS case_name,
@@ -69,15 +59,10 @@ def hybrid_search(embeddings, query_issues):
 
         cid = r["case_id"]
 
-        # ---- Issue similarity ----
+        # -------- ISSUE SIMILARITY --------
         issue_score_result = db.query("""
         MATCH (c:Case {case_id:$id})
-       RETURN
-CASE
-    WHEN c.decisions_embedding IS NOT NULL
-    THEN gds.similarity.cosine(c.decisions_embedding, $embedding)
-    ELSE 0
-END AS score
+        RETURN gds.similarity.cosine(c.issues_embedding, $embedding) AS score
         """, {
             "id": cid,
             "embedding": embeddings["issues"]
@@ -85,7 +70,8 @@ END AS score
 
         issue_score = issue_score_result[0]["score"] if issue_score_result else 0
 
-        # ---- Argument similarity ----
+
+        # -------- ARGUMENT SIMILARITY --------
         arg_score_result = db.query("""
         MATCH (c:Case {case_id:$id})
         RETURN gds.similarity.cosine(c.arguments_embedding, $embedding) AS score
@@ -96,7 +82,8 @@ END AS score
 
         arg_score = arg_score_result[0]["score"] if arg_score_result else 0
 
-        # ---- Decision similarity (NEW) ----
+
+        # -------- DECISION SIMILARITY --------
         decision_score_result = db.query("""
         MATCH (c:Case {case_id:$id})
         RETURN gds.similarity.cosine(c.decisions_embedding, $embedding) AS score
@@ -107,7 +94,7 @@ END AS score
 
         decision_score = decision_score_result[0]["score"] if decision_score_result else 0
 
-        # ---- Score breakdown ----
+
         breakdown = {
             "facts": r["facts_score"],
             "issues": issue_score,
@@ -115,7 +102,6 @@ END AS score
             "decisions": decision_score
         }
 
-        # ---- Final weighted score ----
         final_score = (
             WEIGHTS["facts"] * breakdown["facts"] +
             WEIGHTS["issues"] * breakdown["issues"] +
@@ -123,23 +109,28 @@ END AS score
             WEIGHTS["decisions"] * breakdown["decisions"]
         )
 
-        # ---- Shared issues ----
         shared_issues = get_shared_legal_issues(query_issues, cid)
 
-        # ---- Explanation ----
         reason = generate_reason(breakdown, shared_issues)
 
         final_results.append({
             "case_id": cid,
             "case_name": r["case_name"],
             "final_score": round(final_score, 4),
-            "summary": r["summary"][:1000] if r["summary"] else "",
+
+            # preview only
+            "judgment_preview": r["summary"][:500] if r["summary"] else "",
+
             "reason": reason,
             "shared_issues": shared_issues,
-            "breakdown": breakdown
+            "breakdown": breakdown,
+
+            # links
+            "view_case_details": f"/case/{cid}",
+            "view_full_case_file": f"/case-file/{cid}"
         })
 
-    # ---- Filter & Sort ----
+
     filtered = [
         r for r in final_results
         if r["final_score"] >= 0.50
