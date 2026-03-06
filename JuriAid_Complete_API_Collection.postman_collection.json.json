@@ -5,11 +5,11 @@
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
   "variable": [
-    { "key": "auth_url",         "value": "http://127.0.0.1:8001" },
-    { "key": "pastcase_url",     "value": "http://127.0.0.1:8002" },
-    { "key": "lawstatkg_url",    "value": "http://127.0.0.1:8003" },
-    { "key": "questiongen_url",  "value": "http://127.0.0.1:8004" },
-    { "key": "orchestrator_url", "value": "http://127.0.0.1:8000" },
+    { "key": "auth_url",         "value": "http://0.0.0.0:8001" },
+    { "key": "pastcase_url",     "value": "http://0.0.0.0:8002" },
+    { "key": "lawstatkg_url",    "value": "http://0.0.0.0:8003" },
+    { "key": "questiongen_url",  "value": "http://0.0.0.0:8004" },
+    { "key": "orchestrator_url", "value": "http://0.0.0.0:8000" },
     { "key": "token",            "value": "" }
   ],
   "item": [

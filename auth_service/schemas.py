@@ -42,7 +42,7 @@ class Token(BaseModel):
 
 class TokenData(BaseModel):
     """Schema for decoded JWT token data"""
-    user_id: Optional[str] = None
+    user_id: str  # ✅ Must be str, not int — User IDs are UUIDs
     email: Optional[str] = None
 
 class MessageResponse(BaseModel):

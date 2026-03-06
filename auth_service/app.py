@@ -41,10 +41,11 @@ app = FastAPI(
 # CORS configuration 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=settings.CORS_ORIGINS, 
+    allow_origins=settings.CORS_ORIGINS,  # ["*"] in dev
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
+    expose_headers=["*"],  # ✅ ADD THIS
 )
 
 @app.on_event("startup")
