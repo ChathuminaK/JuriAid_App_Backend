@@ -25,6 +25,7 @@ from orchestrator.service_clients import (
     get_applicable_laws,
     generate_questions,
     upload_case_to_kg,
+    get_case_judgment,
 )
 from orchestrator.agent import (
     detect_user_intent,
@@ -57,83 +58,93 @@ def _format_cases_text(cases_data: dict) -> str:
         name = c.get("case_name", "Unknown Case")
         score = c.get("score", 0)
         reason = c.get("reason", "")
-        summary = c.get("summary", "")
-
-        complaint = c.get("complaint", "")
-        if not complaint and summary:
-            complaint = summary[:300]
+        preview = c.get("judgment_preview", "")
 
         parts.append(
             f"{i}. {name} (similarity: {score:.2f})"
             + (f" - {reason}" if reason else "")
-            + (f"\n   Details: {complaint}" if complaint else "")
+            + (f"\n   Preview: {preview[:300]}" if preview else "")
         )
 
     return "\n".join(parts)
 
 
 def _format_laws_text(laws_data: dict) -> str:
-    """Format applicable laws into text for LLM context."""
-    laws = laws_data.get("applicable_laws", [])
+    """Format applicable case laws into text for LLM context."""
+    laws = laws_data.get("relevant_case_laws", [])
     if not laws:
-        return "No applicable laws retrieved."
+        return "No applicable case laws retrieved."
 
-    personal_law = laws_data.get("personal_law", "Unknown")
-    parts = [f"Personal Law System: {personal_law}\n"]
-
+    parts = []
     for law in laws[:10]:
-        title = law.get("title", "Unknown")
-        section = law.get("section", "")
+        case_name = law.get("case_name", "Unknown")
+        section_number = law.get("section_number", "")
         section_title = law.get("section_title", "")
-        content = law.get("content", "")
-        relevance = law.get("relevance_score", 0)
+        principles = law.get("principle", [])
+        confidence = law.get("confidence_score", 0)
 
-        line = f"- {title}"
-        if section:
-            line += f" Section {section}"
+        line = f"- {case_name}"
+        if section_number:
+            line += f" Section {section_number}"
         if section_title:
             line += f" ({section_title})"
-        line += f" [relevance: {relevance:.3f}]"
-        if content:
-            line += f": {content}"
+        line += f" [confidence: {confidence:.3f}]"
+        if principles:
+            line += f": {'; '.join(str(p) for p in principles[:2])}"
         parts.append(line)
 
     return "\n".join(parts)
 
 
 def _format_laws_for_questions(laws_data: dict) -> str:
-    """Format laws with act_title + section_title for QuestionGen input."""
-    laws = laws_data.get("applicable_laws", [])
+    """Format case_name + principle for QuestionGen input (law field)."""
+    laws = laws_data.get("relevant_case_laws", [])
     if not laws:
         return "No applicable laws found."
 
     parts = []
     for law in laws[:10]:
-        title = law.get("title", "Unknown")
-        section = law.get("section", "")
-        section_title = law.get("section_title", "")
+        case_name = law.get("case_name", "Unknown")
+        principles = law.get("principle", [])
+        principle_text = "; ".join(str(p) for p in principles) if principles else ""
 
-        line = f"- {title}"
-        if section:
-            line += f", Section {section}"
-        if section_title:
-            line += f" ({section_title})"
+        line = f"- {case_name}"
+        if principle_text:
+            line += f": {principle_text}"
         parts.append(line)
 
     return "\n".join(parts)
 
 
-def _format_cases_for_questions(cases_data: dict) -> str:
-    """Format case summaries for QuestionGen input."""
+async def _format_cases_for_questions(cases_data: dict) -> str:
+    """Fetch judgment text for each similar case for QuestionGen input (cases field)."""
     cases = cases_data.get("similar_cases", [])
     if not cases:
         return "No similar past cases found."
 
+    # Fetch full judgment text for each case in parallel
+    case_ids = [c.get("case_id", "") for c in cases[:5] if c.get("case_id")]
+    tasks = [get_case_judgment(cid) for cid in case_ids]
+    results = await asyncio.gather(*tasks, return_exceptions=True)
+
+    judgment_map = {}
+    for cid, result in zip(case_ids, results):
+        if not isinstance(result, Exception) and result:
+            judgment_map[cid] = result
+
     parts = []
     for i, c in enumerate(cases[:5], 1):
-        summary = c.get("summary", "")
-        if summary:
-            parts.append(f"{i}. {summary[:500]}")
+        case_id = c.get("case_id", "")
+        case_name = c.get("case_name", "Unknown")
+
+        detail = judgment_map.get(case_id, {})
+        judgment = detail.get("judgment", "")
+        if judgment:
+            parts.append(f"{i}. {case_name}:\n{judgment[:1000]}")
+        else:
+            preview = c.get("judgment_preview", "")
+            if preview:
+                parts.append(f"{i}. {case_name}:\n{preview[:500]}")
 
     if not parts:
         return "No similar past cases found."
@@ -150,28 +161,41 @@ def _parse_similar_cases(cases_data: dict) -> list[SimilarCase]:
                 case_id=str(c.get("case_id", "")),
                 case_name=str(c.get("case_name", "")),
                 score=float(c.get("score", 0)),
-                summary=str(c.get("summary", "")),
                 reason=str(c.get("reason", "")),
-                complaint=str(c.get("complaint", "")),
-                defense=str(c.get("defense", "")),
+                judgment_preview=str(c.get("judgment_preview", "")),
+                shared_issues=c.get("shared_issues", []),
+                breakdown=c.get("breakdown", {}),
+                view_case_details=str(c.get("view_case_details", "")),
+                view_full_case_file=str(c.get("view_full_case_file", "")),
             )
         )
     return result
 
 
 def _parse_relevant_laws(laws_data: dict) -> list[RelevantLaw]:
-    """Parse raw laws data into schema objects."""
+    """Parse raw case laws data into schema objects."""
     result = []
-    for law in laws_data.get("applicable_laws", []):
+    for law in laws_data.get("relevant_case_laws", []):
         try:
             result.append(
                 RelevantLaw(
-                    act_id=str(law.get("act_id", "")),
-                    title=str(law.get("title", "")),
-                    section=str(law.get("section", "")),
-                    section_title=str(law.get("section_title", "")),
-                    relevance_score=float(law.get("relevance_score", 0)),
-                    content=str(law.get("content", "")),
+                    case_id=str(law.get("case_id", "")),
+                    case_name=str(law.get("case_name", "")),
+                    citation=str(law.get("citation", "")),
+                    topic=str(law.get("topic", "")),
+                    section_number=str(law.get("section_number", "") or ""),
+                    section_title=str(law.get("section_title", "") or ""),
+                    principle=law.get("principle", []) or [],
+                    held=law.get("held", []) or [],
+                    facts=str(law.get("facts", "") or ""),
+                    referenced_laws=law.get("relevant_laws", []) or [],
+                    relevant_sections=law.get("relevant_sections", []) or [],
+                    court=str(law.get("court", "") or ""),
+                    amending_law=str(law.get("amending_law", "") or ""),
+                    confidence_score=float(law.get("confidence_score", 0)),
+                    support_score=float(law.get("support_score", 0)),
+                    query_hits=int(law.get("query_hits", 0)),
+                    detail_url=str(law.get("detail_url", "")),
                 )
             )
         except (ValueError, TypeError) as e:
@@ -280,12 +304,12 @@ async def run_analysis_pipeline(
 
     if isinstance(results[1], Exception):
         logger.error(f"[LawRetrievalAgent] ✗ Failed: {results[1]}")
-        laws_data = {"applicable_laws": []}
+        laws_data = {"relevant_case_laws": []}
     else:
         laws_data = results[1]
 
     cases_count = len(cases_data.get("similar_cases", []))
-    laws_count = len(laws_data.get("applicable_laws", []))
+    laws_count = len(laws_data.get("relevant_case_laws", []))
     logger.info(f"[CaseRetrievalAgent] ✓ Found {cases_count} similar past cases")
     logger.info(f"[LawRetrievalAgent] ✓ Found {laws_count} applicable legal provisions")
 
@@ -307,8 +331,12 @@ async def run_analysis_pipeline(
 
     # --- Step 6: Question Generation Agent ---
     logger.info(f"[QuestionGenAgent] Step 6/7: Generating investigation questions via Legal-BERT + LoRA")
+
+    # Format law: case_name + principle from relevant case laws
     q_laws_text = _format_laws_for_questions(laws_data)
-    q_cases_text = _format_cases_for_questions(cases_data)
+
+    # Format cases: fetch judgment text from /case/{case_id} for each similar case
+    q_cases_text = await _format_cases_for_questions(cases_data)
 
     logger.info(f"[QuestionGenAgent] Input: case_summary ({len(case_summary[:5000])} chars), "
                 f"laws ({len(q_laws_text)} chars), cases ({len(q_cases_text)} chars)")
