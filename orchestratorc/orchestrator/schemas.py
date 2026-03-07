@@ -27,24 +27,32 @@ class SimilarCase(BaseModel):
     case_id: str = ""
     case_name: str = ""
     score: float = 0.0
-    summary: str = ""
     reason: str = ""
-    complaint: str = ""
-    defense: str = ""
+    judgment_preview: str = ""
+    shared_issues: list[str] = Field(default_factory=list)
+    breakdown: dict = Field(default_factory=dict)
+    view_case_details: str = ""
+    view_full_case_file: str = ""
 
 
 class RelevantLaw(BaseModel):
-    act_id: str = ""
-    title: str = ""
-    section: str = ""
+    case_id: str = ""
+    case_name: str = ""
+    citation: str = ""
+    topic: str = ""
+    section_number: str = ""
     section_title: str = ""
-    relevance_score: float = 0.0
-    content: str = ""
-
-
-class GeneratedQuestion(BaseModel):
-    question_id: int
-    question: str
+    principle: list[str] = Field(default_factory=list)
+    held: list[str] = Field(default_factory=list)
+    facts: str = ""
+    referenced_laws: list[str] = Field(default_factory=list)
+    relevant_sections: list[str] = Field(default_factory=list)
+    court: str = ""
+    amending_law: str = ""
+    confidence_score: float = 0.0
+    support_score: float = 0.0
+    query_hits: int = 0
+    detail_url: str = ""
 
 
 class AnalysisMetadata(BaseModel):
@@ -62,7 +70,7 @@ class AnalysisResponse(BaseModel):
     case_summary: str = ""
     similar_cases: list[SimilarCase] = Field(default_factory=list)
     relevant_laws: list[RelevantLaw] = Field(default_factory=list)
-    generated_questions: list[GeneratedQuestion] = Field(default_factory=list)
+    generated_questions: str = ""
     metadata: Optional[AnalysisMetadata] = None
     created_at: str = Field(default_factory=lambda: datetime.utcnow().isoformat() + "Z")
     processing_time_seconds: float = 0.0
