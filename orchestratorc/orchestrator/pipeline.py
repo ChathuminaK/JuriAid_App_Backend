@@ -41,7 +41,6 @@ from orchestrator.schemas import (
     AnalysisMetadata,
     SimilarCase,
     RelevantLaw,
-    GeneratedQuestion,
 )
 
 logger = logging.getLogger("orchestrator_agent")
@@ -204,24 +203,9 @@ def _parse_relevant_laws(laws_data: dict) -> list[RelevantLaw]:
     return result
 
 
-def _parse_questions(questions_data: dict) -> list[GeneratedQuestion]:
-    """Parse raw questions string into schema objects."""
-    raw = questions_data.get("questions", "")
-    if not raw:
-        return []
-
-    questions = []
-    q_id = 0
-    for line in raw.strip().split("\n"):
-        line = line.strip()
-        if not line or len(line) < 10:
-            continue
-        clean = line.lstrip("0123456789.-)*• ").strip()
-        if clean and len(clean) > 10:
-            q_id += 1
-            questions.append(GeneratedQuestion(question_id=q_id, question=clean))
-
-    return questions
+def _parse_questions(questions_data: dict) -> str:
+    """Return raw questions string as-is for frontend to handle."""
+    return questions_data.get("questions", "")
 
 
 async def run_analysis_pipeline(

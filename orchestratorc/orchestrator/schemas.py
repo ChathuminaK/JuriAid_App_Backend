@@ -55,11 +55,6 @@ class RelevantLaw(BaseModel):
     detail_url: str = ""
 
 
-class GeneratedQuestion(BaseModel):
-    question_id: int
-    question: str
-
-
 class AnalysisMetadata(BaseModel):
     filename: str
     file_size_mb: float
@@ -75,7 +70,7 @@ class AnalysisResponse(BaseModel):
     case_summary: str = ""
     similar_cases: list[SimilarCase] = Field(default_factory=list)
     relevant_laws: list[RelevantLaw] = Field(default_factory=list)
-    generated_questions: list[GeneratedQuestion] = Field(default_factory=list)
+    generated_questions: str = ""
     metadata: Optional[AnalysisMetadata] = None
     created_at: str = Field(default_factory=lambda: datetime.utcnow().isoformat() + "Z")
     processing_time_seconds: float = 0.0
