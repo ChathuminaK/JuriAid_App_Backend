@@ -1,14 +1,12 @@
 import os
 from typing import Any, Dict, List
-from pathlib import Path
 
 from neo4j import GraphDatabase
 from neo4j.exceptions import Neo4jError
 from dotenv import load_dotenv
 
 # Load environment variables
-ENV_PATH = Path(__file__).resolve().parents[1] / ".env"
-load_dotenv(dotenv_path=ENV_PATH, override=False)
+load_dotenv()
 
 
 class KGClient:
