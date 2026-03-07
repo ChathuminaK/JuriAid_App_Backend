@@ -358,7 +358,7 @@ async def run_analysis_pipeline(
     logger.info(f"[OrchestratorAgent] Multi-Agent Pipeline COMPLETED in {processing_time}s")
     logger.info(f"[OrchestratorAgent]   Agents used: IntentDetection, CaseRetrieval, LawRetrieval,")
     logger.info(f"[OrchestratorAgent]                Summary, QuestionGen, Synthesis, Memory")
-    logger.info(f"[OrchestratorAgent]   Cases: {cases_count} | Laws: {laws_count} | Questions: {q_count}")
+    logger.info(f"[OrchestratorAgent]   Cases: {cases_count} | Laws: {laws_count} | Questions")
     logger.info(f"[OrchestratorAgent]   Saved: {saved_for_reference} | Session: {session_id[:8]}...")
     logger.info(f"[OrchestratorAgent]   Framework: LangChain | LLM: Gemini 2.5 Flash")
     logger.info(f"[OrchestratorAgent] ═══════════════════════════════════════════")

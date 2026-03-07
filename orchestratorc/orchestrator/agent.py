@@ -146,9 +146,8 @@ async def generate_case_summary(
             for msg in conversation_history[-5:]:
                 history_context += f"- {msg['role']}: {msg['content'][:200]}\n"
 
-        summary_prompt = f"""You are a senior Sri Lankan Legal Advisor Agent with 20 years of experience.
-Analyze this legal case document thoroughly based on the user's request.
-Also identify and mention the Plaintiff's Attorney-at-Law name and Defendant's Attorney-at-Law name if mentioned in the case document.
+        summary_prompt = f"""You are JuriAid Legal Advisor Agent, an AI legal analysis system specializing in Sri Lankan law.
+Always refer to yourself as "the Legal Advisor Agent" in your responses — you are an AI agent, not a human.
 
 USER REQUEST: {user_prompt}
 {history_context}
@@ -240,7 +239,8 @@ async def synthesize_analysis(
         return case_summary
 
     try:
-        synthesis_prompt = f"""You are a senior Sri Lankan Legal Advisor Agent performing a final review.
+        synthesis_prompt = f"""You are JuriAid Legal Advisor Agent, an AI legal analysis system performing a final review.
+Always refer to yourself as "the Legal Advisor Agent" — you are an AI agent, not a human.
 
 USER REQUEST: {user_prompt}
 
