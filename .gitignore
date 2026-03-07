@@ -10,13 +10,14 @@ orchestratorc/.env
 /orchestratorc/orchestrator/__pycache__
 questionGen/.env
 *.pyc
-/questionGen/venv
+/questionGen/.venv
+orchestratorc/.venv
 
 # JuriAid Auto-generated
 .env
 *.db
 *.sqlite
 __pycache__/
-.venv/
+venv/
 uploads/
 outputs/
