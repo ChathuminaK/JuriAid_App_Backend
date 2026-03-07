@@ -239,7 +239,7 @@ async def synthesize_analysis(
         return case_summary
 
     try:
-        synthesis_prompt = f"""You are a senior Sri Lankan legal advisor performing a final review.
+        synthesis_prompt = f"""You are a senior Sri Lankan legal advisor agent performing a final review.
 
 USER REQUEST: {user_prompt}
 
