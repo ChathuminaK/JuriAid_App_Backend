@@ -1,11 +1,13 @@
-from langchain_ollama import ChatOllama
+
+import os
+from dotenv import load_dotenv
+from langchain_groq import ChatGroq
 from langchain_core.prompts import PromptTemplate
 
-llm = ChatOllama(
-    model="mistral",
-    temperature=0.1,       # Low temperature = more deterministic, consistent output
-    num_predict=512,        # Limit output length to reduce time
-)
+load_dotenv()
+
+llm = ChatGroq(model="llama-3.1-8b-instant", temperature=0.1, api_key=os.getenv("GROQ_API_KEY"))
+
 
 _REASONING_PROMPT = PromptTemplate(
     input_variables=["case", "law", "cases"],
