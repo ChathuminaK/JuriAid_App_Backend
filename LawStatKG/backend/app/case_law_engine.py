@@ -72,10 +72,10 @@ class CaseLawSearchEngine:
         query: str,
         top_k: int = 5,
         bm25_candidates: int = 80,
-        alpha: float = 0.55,
-        beta: float = 0.45,
-        min_match_ratio: float = 0.50,
-        min_semantic_cosine: float = 0.30,
+        alpha: float = 0.65,
+        beta: float = 0.35,
+        min_match_ratio: float = 0.30,
+        min_semantic_cosine: float = 0.10,
     ) -> List[Dict[str, Any]]:
 
         if not self.ready:
