@@ -285,19 +285,6 @@ async def search_more(file: UploadFile = File(...)):
 
     results = hybrid_search(embeddings, issues, limit=6)
 
-    formatted_results = []
-
-    for r in results:
-
-        score = float(r.get("score", 0))
-
-        formatted_results.append({
-            "case_id": r.get("case_id"),
-            "case_name": r.get("case_name"),
-            "score": round(score, 4),   # 0.83 format
-            "judgment_preview": r.get("judgment_preview", "")[:300]
-        })
-
     return {
-        "similar_cases": formatted_results
+        "similar_cases": results
     }
