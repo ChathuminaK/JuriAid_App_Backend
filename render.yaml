@@ -1,0 +1,104 @@
+services:
+  - type: web
+    name: juriaid-auth-service
+    runtime: python
+    rootDir: auth_service
+    plan: free
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn app:app --host 0.0.0.0 --port $PORT
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.11.9
+      - key: JWT_SECRET_KEY
+        sync: false
+      - key: DATABASE_URL
+        sync: false
+      # add any other required secrets here
+
+  - type: web
+    name: juriaid-pastcase-retrieval
+    runtime: python
+    rootDir: past_case_retrieval
+    plan: free
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn app.main:app --host 0.0.0.0 --port $PORT
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.11.9
+      - key: NEO4J__URI
+        sync: false
+      - key: NEO4J__USER
+        sync: false
+      - key: NEO4J__PASSWORD
+        sync: false
+
+  - type: web
+    name: juriaid-lawstatkg
+    runtime: python
+    rootDir: LawStatKG/backend
+    plan: free
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn app.api:app --host 0.0.0.0 --port $PORT
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.11.9
+      - key: NEO4J_URI
+        sync: false
+      - key: NEO4J_USER
+        sync: false
+      - key: NEO4J_PASSWORD
+        sync: false
+
+  - type: web
+    name: juriaid-questiongen
+    runtime: python
+    rootDir: questionGen
+    plan: free
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn api:app --host 0.0.0.0 --port $PORT
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.11.9
+      - key: OPENAI_API_KEY
+        sync: false
+
+  - type: web
+    name: juriaid-orchestrator
+    runtime: python
+    rootDir: orchestratorc
+    plan: free
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn app:app --host 0.0.0.0 --port $PORT
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.11.9
+      - key: DEBUG
+        value: "false"
+      - key: AUTH_ENABLED
+        value: "false"
+      - key: AUTH_SERVICE_URL
+        value: https://juriaid-auth-service.onrender.com
+      - key: PAST_CASE_SERVICE_URL
+        value: https://juriaid-pastcase-retrieval.onrender.com
+      - key: LAWSTATKG_SERVICE_URL
+        value: https://juriaid-lawstatkg.onrender.com
+      - key: QUESTIONGEN_SERVICE_URL
+        value: https://juriaid-questiongen.onrender.com
+      - key: GEMINI_API_KEY
+        sync: false
+      - key: REDIS_ENABLED
+        value: "false"
+      - key: SERVICE_TIMEOUT
+        value: "120"
+      - key: QUESTIONGEN_TIMEOUT
+        value: "600"
+      - key: MAX_RETRIES
+        value: "2"
+      - key: RETRY_DELAY
+        value: "1.0"
+      - key: SHORT_TERM_WINDOW
+        value: "5"
+      - key: LONG_TERM_MAX_MESSAGES
+        value: "50"
+      - key: MAX_FILE_SIZE_MB
+        value: "10"

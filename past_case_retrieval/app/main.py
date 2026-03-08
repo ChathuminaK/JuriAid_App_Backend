@@ -36,10 +36,14 @@ def clean_text(text: str):
     return text.strip()
 
 
-app = FastAPI()
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # ✅ Don't load heavy models at startup — let them lazy load on first request
+    print("✅ Past Case Retrieval service started (models will load on first request)")
+    yield
+    print("🛑 Shutting down...")
 
-UPLOAD_DIR = "temp"
-os.makedirs(UPLOAD_DIR, exist_ok=True)
+app = FastAPI(lifespan=lifespan)
 
 
 # --------------------------------
@@ -47,16 +51,12 @@ os.makedirs(UPLOAD_DIR, exist_ok=True)
 # --------------------------------
 @app.get("/")
 def root():
-    return {"status": "Backend running"}
+    return {"status": "ok"}
 
 
 @app.get("/health")
 def health():
-    try:
-        db.query("RETURN 1")
-        return {"database": "connected"}
-    except Exception as e:
-        return {"database": "error", "message": str(e)}
+    return {"status": "ok", "service": "past-case-retrieval"}
 
 
 # --------------------------------
