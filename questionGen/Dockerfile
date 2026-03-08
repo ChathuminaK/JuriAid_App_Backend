@@ -7,7 +7,6 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 COPY . .
 
-ENV PORT=8080
-EXPOSE 8080
+EXPOSE 8004
 
-CMD ["uvicorn", "api:app", "--host", "0.0.0.0", "--port", "8080", "--timeout-keep-alive", "120"]
+CMD ["uvicorn", "api:app", "--host", "0.0.0.0", "--port", "8004"]
