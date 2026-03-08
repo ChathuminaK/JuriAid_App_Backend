@@ -27,11 +27,29 @@ from app.mongodb_service import upload_case_file, get_case_file
 # -------------------------------------------------
 def clean_text(text: str):
 
-    text = re.sub(r"\(\s*\d+\s*\)", "", text)
+    if not text:
+        return ""
+
+    # remove page numbers
+    text = re.sub(r"Page\s+\d+\s+of\s+\d+", "", text)
+
+    # remove duplicate page markers
+    text = re.sub(r"\(Duplicate of Page \d+\)", "", text)
+
+    # remove non ascii characters
     text = re.sub(r"[^\x00-\x7F]+", " ", text)
+
+    # remove broken hyphen words
     text = re.sub(r"-\s+", "", text)
-    text = re.sub(r"\n\s*\n", "\n\n", text)
+
+    # merge sentences broken by newline
+    text = re.sub(r"\n(?=[a-z])", " ", text)
+
+    # normalize spaces
     text = re.sub(r"[ \t]+", " ", text)
+
+    # keep paragraph spacing
+    text = re.sub(r"\n\s*\n", "\n\n", text)
 
     return text.strip()
 
@@ -206,6 +224,7 @@ def get_case(case_id: str):
 
     cleaned_complaint = clean_text(record["complaint"]) if record["complaint"] else ""
     cleaned_defense = clean_text(record["defense"]) if record["defense"] else ""
+    cleaned_judgment = clean_text(record["judgment"]) if record["judgment"] else ""
 
     return {
         "case_id": record["case_id"],
@@ -214,7 +233,7 @@ def get_case(case_id: str):
         "defense": cleaned_defense,
 
         # FULL JUDGMENT
-        "judgment": record["judgment"]
+        "judgment": cleaned_judgment
     }
 
 
@@ -240,3 +259,31 @@ def view_case(case_id: str):
         io.BytesIO(file_bytes),
         media_type="application/pdf"
     )
+
+@app.post("/search-more")
+async def search_more(file: UploadFile = File(...)):
+
+    file_bytes = await file.read()
+
+    text = extract_text_from_pdf_bytes(file_bytes)
+
+    if not is_legal_document(text):
+        return {
+            "message": "Uploaded file is not a legal case document",
+            "similar_cases": []
+        }
+
+    roles = classify_text(text)
+
+    embeddings = {
+        r: generate_embedding(" ".join(roles[r]))
+        for r in ["facts", "issues", "arguments", "decisions"]
+    }
+
+    issues = roles["issues"][:5]
+
+    results = hybrid_search(embeddings, issues, limit=6)
+
+    return {
+        "similar_cases": results
+    }
