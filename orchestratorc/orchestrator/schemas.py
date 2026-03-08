@@ -59,7 +59,7 @@ class AnalysisMetadata(BaseModel):
     filename: str
     file_size_mb: float
     text_length: int
-    user_id: int
+    user_id: str
     user_prompt: str
     saved_for_reference: bool = False
 

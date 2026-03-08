@@ -38,7 +38,7 @@ def generate_reason(breakdown, shared_issues):
     return ". ".join(reasons) + "."
 
 
-def hybrid_search(embeddings, query_issues):
+def hybrid_search(embeddings, query_issues, limit=3):
 
     vector_query = """
     CALL db.index.vector.queryNodes('facts_embedding_index', 20, $facts_embedding)
@@ -59,7 +59,7 @@ def hybrid_search(embeddings, query_issues):
 
         cid = r["case_id"]
 
-        # -------- ISSUE SIMILARITY --------
+        # ISSUE SIMILARITY
         issue_score_result = db.query("""
         MATCH (c:Case {case_id:$id})
         RETURN gds.similarity.cosine(c.issues_embedding, $embedding) AS score
@@ -71,7 +71,7 @@ def hybrid_search(embeddings, query_issues):
         issue_score = issue_score_result[0]["score"] if issue_score_result else 0
 
 
-        # -------- ARGUMENT SIMILARITY --------
+        # ARGUMENT SIMILARITY
         arg_score_result = db.query("""
         MATCH (c:Case {case_id:$id})
         RETURN gds.similarity.cosine(c.arguments_embedding, $embedding) AS score
@@ -83,7 +83,7 @@ def hybrid_search(embeddings, query_issues):
         arg_score = arg_score_result[0]["score"] if arg_score_result else 0
 
 
-        # -------- DECISION SIMILARITY --------
+        # DECISION SIMILARITY
         decision_score_result = db.query("""
         MATCH (c:Case {case_id:$id})
         RETURN gds.similarity.cosine(c.decisions_embedding, $embedding) AS score
@@ -117,15 +117,10 @@ def hybrid_search(embeddings, query_issues):
             "case_id": cid,
             "case_name": r["case_name"],
             "final_score": round(final_score, 4),
-
-            # preview only
             "judgment_preview": r["summary"][:500] if r["summary"] else "",
-
             "reason": reason,
             "shared_issues": shared_issues,
             "breakdown": breakdown,
-
-            # links
             "view_case_details": f"/case/{cid}",
             "view_full_case_file": f"/case-file/{cid}"
         })
@@ -138,4 +133,4 @@ def hybrid_search(embeddings, query_issues):
 
     filtered.sort(key=lambda x: x["final_score"], reverse=True)
 
-    return filtered[:3]
+    return filtered[:limit]
