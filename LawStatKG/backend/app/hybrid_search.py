@@ -8,11 +8,13 @@ from typing import List, Dict, Optional, DefaultDict
 from collections import defaultdict
 import hashlib
 import numpy as np
+from rank_bm25 import BM25Okapi
 
 # To this (lazy load = only loads when first request comes):
 _embeddings = None
 _meta = None
 _sections = None
+_model = None  
 
 def get_artifacts():
     """✅ Lazy load search artifacts"""
