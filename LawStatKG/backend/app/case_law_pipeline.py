@@ -10,7 +10,12 @@ S_DOT_PAT = re.compile(r"\bs\.\s*(\d{1,4}[A-Za-z]?)\b", re.IGNORECASE)
 
 STOPWORDS = {
     "the", "and", "or", "to", "of", "in", "on", "for", "a", "an", "is", "are", "was", "were", "be",
-    "plaintiff", "defendant", "respondent", "petitioner", "court", "honourable", "case", "number"
+    "plaintiff", "defendant", "respondent", "petitioner", "court", "honourable", "case", "number",
+    # OCR boilerplate from page headers and CSV metadata lines
+    "page", "nature", "regular", "value", "true", "copy", "procedure",
+    # high-frequency legal filler with zero topical signal
+    "state", "states", "stated", "submit", "submitted", "pray", "prays",
+    "respectfully", "hereby", "said", "herein", "above", "named",
 }
 
 # CHANGE:
@@ -26,7 +31,21 @@ TOPIC_KEYWORDS = {
     "jurisdiction_and_procedure": ["jurisdiction", "district court", "procedure", "plaint", "answer"],
     "condonation_and_connivance": ["condonation", "connivance", "forgiveness", "reconciliation"],
     "muslim_law": ["muslim", "quazi", "islamic", "repudiating contract of marriage"],
+    "decree_nisi": ["decree nisi", "nisi declaration", "nisi absolute", "make absolute", "decree absolute"],
 }
+
+# Strips procedural boilerplate noise from PDF text before keyword extraction
+_NOISE_RE = re.compile(
+    r"(\[?Page\s*\d+\]?"              # [Page 1] or Page 1 (after bracket-strip)
+    r"|Case Number\s*:.*"
+    r"|No\.\s*\d+[/,].*"
+    r"|Attorney.at.Law.*"
+    r"|T\.?\s*P\.?\s*\d[\d\-]+"
+    r"|In the District Court.*"
+    r"|\d{4}[./-]\d{2}[./-]\d{2}"
+    r"|\bon this\b.*?\byear\b.*?\d{4}\.?)",
+    re.IGNORECASE
+)
 
 
 def normalize_text(t: str) -> str:
@@ -34,6 +53,11 @@ def normalize_text(t: str) -> str:
     t = re.sub(r"[ \t]+", " ", t)
     t = re.sub(r"\n{3,}", "\n\n", t)
     return t.strip()
+
+
+def _strip_noise(text: str) -> str:
+    text = _NOISE_RE.sub(" ", text)
+    return re.sub(r"\s+", " ", text).strip()
 
 
 def extract_keywords(text: str, top_k: int = 30) -> List[str]:
@@ -65,8 +89,9 @@ def detect_topics(text: str) -> List[str]:
 
 def build_queries(case_text: str) -> List[str]:
     t = clean_query(case_text)
-    keywords = extract_keywords(t)
-    sections = extract_sections(t)
+    clean_t = _strip_noise(t)          # strip procedural noise before keyword extraction
+    keywords = extract_keywords(clean_t)
+    sections = extract_sections(t)     # sections from original text
     detected_topics = detect_topics(t)
 
     queries = []
@@ -113,7 +138,8 @@ def support_score(case_text: str, doc: Dict[str, Any]) -> float:
     d = set(tokenize(blob))
     if not c or not d:
         return 0.0
-    return len(c & d) / (len(d) + 1e-6)
+    intersection = len(c & d)
+    return intersection / (len(c | d) + 1e-6)   # Jaccard: fair regardless of doc size
 
 
 def retrieve_case_law_from_case(engine, case_text: str, top_k: int = 5) -> Dict[str, Any]:
