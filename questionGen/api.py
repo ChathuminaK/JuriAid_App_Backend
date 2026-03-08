@@ -1,49 +1,30 @@
-import os
-from dotenv import load_dotenv
-load_dotenv()
-
-GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
-
-if not GEMINI_API_KEY:
-    raise RuntimeError(
-        "❌ GEMINI_API_KEY is not set! "
-        "Add it in Cloud Run → Edit & Deploy → Environment Variables"
-    )
-
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
-from langchain_ollama import ChatOllama
+from orchestrator import run_question_generation
 
 app = FastAPI()
 
-llm = ChatOllama(
-    model="mistral",
-    temperature=0.3
-)
 
 class QuestionRequest(BaseModel):
     case_text: str
     law: str
     cases: str
 
+
 @app.post("/generate-questions")
 def generate_questions(data: QuestionRequest):
+    try:
+        result = run_question_generation(
+            case_text=data.case_text,
+            law_text=data.law,
+            past_cases=data.cases
+        )
+        return {"questions": result}
 
-    prompt = f"""
-Generate ONLY legal questions.
-Number them.
-One question per line.
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
-Case:
-{data.case_text}
 
-Law:
-{data.law}
-
-Past Case:
-{data.cases}
-"""
-
-    response = llm.invoke(prompt)
-
-    return {"questions": response.content}
+@app.get("/health")
+def health():
+    return {"status": "ok"}

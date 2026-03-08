@@ -1,0 +1,485 @@
+{
+  "civil_procedure_code_matrimonial_actions": {
+    "chapter": "Chapter XLII - Matrimonial Actions",
+    "sections": [
+      {
+        "section_number": "596",
+        "title": "Procedure in Matrimonial Actions",
+        "content": "In all actions for divorce a vinculo matrimonii, or for separation a mensa et thoro, or for declaration of nullity of marriage, the pleadings shall be by way of plaint and answer, and such plaint and answer shall be subject to the rules and practice by this Ordinance provided with respect to plaints and answers in ordinary civil actions, so far as the same can be made applicable, and the procedure generally in such matrimonial cases shall (subject to the provisions contained in this Chapter) follow the procedure hereinbefore set out with respect to ordinary civil actions.",
+        "case_laws": [
+          {
+            "case_name": "Pinhamy Vs. Babynona",
+            "citation": "14 N.L.R. 104",
+            "facts": "Husband and Wife entered into an agreement to live separately and not to litigate against each other on their conduct, behaviour etc.",
+            "principle": "The said agreement is a bar to maintain an action for divorce by husband against the wife on adultery, subsequent to agreement.",
+            "topic": "Separation Agreement"
+          },
+          {
+            "case_name": "Appuhamy Vs. Julihamy",
+            "citation": "16 N.L.R. 83",
+            "facts": "The plaintiff sued his wife, the 1st Defendant, for divorce on the ground of malicious desertion and adultery with the 2nd Defendant.",
+            "held": "Supreme Court refused to grant the divorce though the adultery was proved as the plaintiff was guilty of cruelty in as much as he had communicated venereal disease to her. Wilful communication of venereal disease by a spouse constituted legal cruelty. The presumption was one's health is within his knowledge.",
+            "principle": "Wilful communication of venereal disease by a spouse constitutes legal cruelty and can bar divorce relief even when adultery is proved.",
+            "topic": "Cruelty - Venereal Disease"
+          }
+        ]
+      },
+      {
+        "section_number": "597",
+        "title": "Jurisdiction",
+        "content": "(1) Any husband or wife may present a plaint to the District Court within the local limits of the jurisdiction of which he or she, as the case may be, resides, praying that his or her marriage may be dissolved on any ground for which marriage may, by the law applicable in Sri Lanka to his or her case, be dissolved.",
+        "case_laws": [
+          {
+            "case_name": "Wright Vs. Wright",
+            "citation": "9 N.L.R. 31",
+            "principle": "It is competent to institute an action for divorce in the Court within the jurisdiction of which the defendant resides.",
+            "topic": "Jurisdiction for Divorce"
+          },
+          {
+            "case_name": "Asoken nee Kandasamy Vs. Asokan",
+            "citation": "1994 (1) S.L.R. 413",
+            "principle": "Malicious desertion (constructive) is a valid ground for dissolution of marriage according to the law applicable in Sri Lanka as set out in section 91 of the Marriages (General) Ordinance. Jurisdiction is not affected by the fact that the malicious desertion took place in India and the fact that the husband is domiciled in India. Section 19 of the Marriages (General) Ordinance read with section 24 of the Judicature Act and also with section 3 of the Judicature (Amendment) Act No. 71 of 1981 reveals that divorce jurisdiction is exercisable by the District Court irrespective of where the marriage was contracted. The case of Le Mesurier Vs. Le Mesurier (1 N.L.R. 160) is not applicable as the law stands today.",
+            "topic": "Jurisdiction - Malicious Desertion",
+            "relevant_laws": ["Section 91 - Marriages (General) Ordinance", "Section 19 - Marriages (General) Ordinance", "Section 24 - Judicature Act", "Section 3 - Judicature (Amendment) Act No. 71 of 1981"]
+          }
+        ]
+      },
+      {
+        "section_number": "598",
+        "title": "Co-defendant in Adultery Cases",
+        "content": "Upon any such plaint presented by a husband, in which the adultery of the wife is the cause or part of the cause of action, the plaintiff shall make the alleged adulterer a co-defendant to the said action, unless he is excused from so doing on one of the following grounds, to be allowed by the Court upon an application for the purpose: (1) that the defendant is leading the life of a prostitute, and that the plaintiff knows of no person with whom the adultery has been committed; (2) that the name of the alleged adulterer is unknown to the plaintiff, although he has made due efforts to discover it; (3) that the alleged adulterer is dead; and it shall be lawful in any such plaint to include a claim for pecuniary damages against such co-defendant.",
+        "case_laws": [
+          {
+            "case_name": "Karunathileke Vs. Karunathileke",
+            "citation": "52 N.L.R. 300",
+            "facts": "In an action for dissolution of marriage brought by a wife, the husband filed answer denying the plaintiff's allegations and accusing the Plaintiff on the ground that the plaintiff was living in adultery with D. He averred that he was all along willing to condone her acts of adultery with A, B and C.",
+            "held": "The defendant was under no obligation to make A, B and C parties to the action or to apply for an excuse from the Court, under section 598 of the Civil Procedure Code, for not making them parties.",
+            "principle": "A defendant wife is not obligated to make alleged adulterers parties when she is the respondent in a divorce action brought by her husband.",
+            "topic": "Parties in Adultery Action"
+          },
+          {
+            "case_name": "Bednarz Vs. Bednarz",
+            "citation": "2002 (1) S.L.R. 99",
+            "facts": "The plaintiff sued her husband for a divorce on the ground of constructive malicious desertion. The defendant filed answer and pleaded under 'claim in reconvention' that the plaintiff had committed adultery with one Geethaka Bandara and prayed for: (a) dismissal of plaintiff's action, (b) divorce on ground of adultery, (c) damages of Rs. 5,000,000 from plaintiff, (d) damages of Rs. 5,000,000 from co-respondent.",
+            "held": [
+              "Although the claim for damages against the plaintiff may perhaps be a 'claim in reconvention', the claim against the alleged adulterer is a new claim falling within the scope of section 598 read with section 603 of the Civil Procedure Code.",
+              "The defendant had sufficiently complied with the requirements of section 598 and section 603 of the Code; and that in a claim for divorce on the ground of adultery the alleged adulterer is not entitled to notice or hearing before he is made a party.",
+              "It is not open to the defendant filing answer to amend the caption given in the plaint. Such amendment must be made by Court or with the permission of Court."
+            ],
+            "principle": "In adultery-based divorce claims, the alleged adulterer can be made a co-respondent without prior notice; caption amendments require court permission.",
+            "topic": "Co-respondent and Claim in Reconvention",
+            "relevant_sections": ["598", "603"]
+          }
+        ]
+      },
+      {
+        "section_number": "599",
+        "title": "Affidavit Where Co-defendant is Excused",
+        "content": "The prayer to be excused from making the alleged adulterer a co-defendant and the allegations of fact upon which it is founded, supported by affidavit of fact or other sufficient evidence, shall be embodied in the plaint.",
+        "case_laws": []
+      },
+      {
+        "section_number": "599A",
+        "title": "Application to Wife's Plaint",
+        "content": "The provisions of sections 598 and 599 shall, mutatis mutandis, apply where in a plaint presented by a wife, adultery of the husband is a cause of action.",
+        "reference": "§ 91, 20 of 1977",
+        "case_laws": []
+      },
+      {
+        "section_number": "602",
+        "title": "Decree for Dissolution of Marriage",
+        "content": "When the Court is satisfied on the evidence that the case of the plaintiff has been proved, the Court shall pronounce a decree declaring such marriage to be dissolved in the manner and subject to all the provisions and limitations in section 604 and 605.",
+        "reference": "§ 93, 20 of 1977",
+        "case_laws": [
+          {
+            "case_name": "Abraham Vs. Alwis",
+            "citation": "42 N.L.R. 373",
+            "principle": "Where the District Judge refused to exercise his discretion under the proviso to section 602 the Civil Procedure Code in favour of a guilty plaintiff in a matrimonial action, the Supreme Court in appeal will not interfere unless it feels that discretion has not been properly exercised.",
+            "topic": "Judicial Discretion in Matrimonial Actions"
+          },
+          {
+            "case_name": "Fernando Vs. Peiris",
+            "citation": "50 N.L.R. 40",
+            "principle": [
+              "An action for nullity of marriage on the ground of latent impotency should not be instituted until the lapse of at least three years from marriage.",
+              "Per Gratien J (obiter): The proviso to section 602 of the Civil Procedure Code under which the Court can refuse a decree on grounds of unreasonable delay applies only to actions for divorce and not to actions for nullity of marriage."
+            ],
+            "topic": "Nullity of Marriage - Latent Impotency"
+          },
+          {
+            "case_name": "Jayasinghe Vs. Jayasinghe",
+            "citation": "55 N.L.R. 410",
+            "principle": [
+              "Even in the absence of an issue as to condonation of the alleged adultery, the trial Judge is put upon inquiry as to whether there has been condonation or not if the evidence discloses that the parties had resumed living together under circumstances which would justify the belief that reconciliation had taken place (Conjugal cohabitation).",
+              "Conjugal cohabitation within the meaning of section 602(2) of the Code can be resumed even without a renewal of sexual intercourse between the spouse after reconciliation."
+            ],
+            "topic": "Condonation and Conjugal Cohabitation"
+          },
+          {
+            "case_name": "Sedris Singho Vs. Somawathy",
+            "citation": "1978/79 S.L.R. 140",
+            "principle": "That in as much as the former proviso to section 602 of Civil Procedure Code has been repealed by the amending Law No. 20 of 1977, the fact that a plaintiff has during the subsistence of the marriage been guilty of adultery will not be a bar to his obtaining a decree for divorce where there are findings in his favour of malicious desertion and adultery on the part of the wife.",
+            "topic": "Adultery and Divorce - Amendment",
+            "amending_law": "Law No. 20 of 1977"
+          },
+          {
+            "case_name": "Muthuranee Vs. Thuraisingham",
+            "citation": "1984 (1) S.L.R. 381",
+            "principle": "The amendment introducing section 608(2)(b) into the Civil Procedure Code created a new ground of divorce for the future and is in truth not retrospective. To hold that the period of seven years must be reckoned only from 15.12.1977 would in effect render the amendment a dead letter and sterile on the Statute Book for a period of seven years from this date. Section 608(2)(b) applies even to cases where parties have been separated a mensa et thoro for more than seven years prior to the subsection coming into operation.",
+            "topic": "Separation - Seven Years Period",
+            "relevant_section": "608(2)(b)"
+          }
+        ]
+      },
+      {
+        "section_number": "603",
+        "title": "Relief to Defendant",
+        "content": "In any action instituted for dissolution of marriage, if the defendant opposes the relief sought on any ground which would have enabled him or her to sue as plaintiff for such dissolution, the Court may in such action give to the defendant on his or her application the same relief to which he or she would have been entitled in case he or she had presented a plaint seeking such relief.",
+        "case_laws": []
+      }
+    ],
+    "case_laws_by_topic": {
+      "adultery": [
+        {
+          "case_name": "De Silva Vs. De Silva",
+          "citation": "27 N.L.R. 289",
+          "principle": [
+            "In an action for divorce brought by a husband, the nature of damages awarded against a co-respondent is compensatory not punitive.",
+            "The measure of damage is based upon two considerations: (a) The actual value of the wife to the husband. (b) Proper compensation to him for injury to his feelings, the blow to his honour, and the hurt to his matrimonial and family life.",
+            "The forfeiture of property of an adulterous spouse contemplated by Roman Dutch Law has reference only to the benefits derived by him or her under the marriage, and does not extend to the separate property of the offending spouse."
+          ],
+          "topic": "Damages - Compensatory Not Punitive"
+        },
+        {
+          "case_name": "Eliyatamby Vs. Eliyatamby",
+          "citation": "27 N.L.R. 396",
+          "principle": [
+            "In an action by a husband for divorce, letters written by the wife to the co-respondent, but not delivered to him are not admissible against the co-respondent.",
+            "The facts that the co-respondent's counsel has based questions in cross-examination upon the contents of the letters, which had been properly admitted against the wife, does not make the latter's evidence against the co-respondent."
+          ],
+          "topic": "Evidence - Letters to Co-respondent"
+        },
+        {
+          "case_name": "Senavirathna Vs. Pannishamy",
+          "citation": "29 N.L.R. 97",
+          "principle": "Where a plaintiff who institutes proceedings for divorce from his wife, four and a half years after the adultery complained of, is himself found to have lived in adultery for four years up to the institution of the action and also during its pendency. Held, that the Court is justified in refusing to grant the plaintiff a divorce.",
+          "topic": "Refusal of Divorce - Plaintiff's Adultery"
+        },
+        {
+          "case_name": "Annakeddi Vs. Myappen",
+          "citation": "33 N.L.R. 198",
+          "principle": "Where an action for dissolution of marriage is brought by a wife on the ground of malicious desertion by the husband, and the latter claimed a divorce on the ground of the adultery of the wife, the alleged adulterer should be made a party to the proceedings. The nature of evidence required to establish a Ceylon domicile considered.",
+          "topic": "Dissolution - Co-respondent and Domicile"
+        },
+        {
+          "case_name": "Blok Vs. Blok",
+          "citation": "42 N.L.R. 70",
+          "principle": [
+            "Where in an action for divorce the only adultery put in issue is the adultery alleged between the two defendants, it is not open to the judge, on finding that the allegation has not been established, to base his decree on adultery with a person unknown without an allegation made to that effect and an issue raised upon it.",
+            "Where the co-respondent's conduct is such as to lead to a reasonable suspicion that he had been guilty of adultery, the Court will refuse to allow him his costs."
+          ],
+          "topic": "Adultery - Unknown Person"
+        },
+        {
+          "case_name": "Perera Vs. Halwatura",
+          "citation": "59 N.L.R. 233",
+          "facts": "Where a husband sued his wife for divorce on the ground of her adultery, adultery was clearly established, and the co-respondent was ordered by the trial Judge to pay a sum of Rs. 20,000/= as damages.",
+          "held": "That there was no reason for reducing the amount of the damages awarded, keeping in view the observations made by the Privy Council in Alles Vs. Alles and repeated in Dean Vs. Anthonisz.",
+          "principle": "Damages awarded for adultery should not be reduced when properly assessed based on established principles.",
+          "topic": "Damages in Adultery Cases"
+        },
+        {
+          "case_name": "Alles Vs. Alles",
+          "citation": "46 N.L.R. 217",
+          "principle": [
+            "In the assessment of compensation to the husband for injury to his feelings and the blow to his marital honour, the fact that he acted carelessly in allowing his wife to associate freely with the co-respondent, a man of a different race and creed, and neglected to determine their association, may be taken into consideration in reducing the measure of damages.",
+            "Where adultery was proved, the co-respondent alone was compelled to pay the costs of the husband in accordance with the provisions of section 612 of the Civil Procedure Code."
+          ],
+          "topic": "Compensation and Costs",
+          "relevant_section": "612"
+        },
+        {
+          "case_name": "Dean Vs. Anthonisz",
+          "citation": "54 N.L.R. 538",
+          "principle": "In an action for divorce instituted by a husband against his wife on the ground of adultery, the two main considerations governing the award of damages as against the co-respondent are: (a) The actual value of the wife to the husband, (b) Compensation to the husband for injury to his feelings, the blow to his marital honour and the loss to his matrimonial and family life. In assessing the damages, the Court may take into account the fact that the plaintiff was indiscreet in allowing the close association of the co-respondent with his family too long and only took action when matters had gone too far.",
+          "topic": "Assessment of Damages in Adultery"
+        }
+      ],
+      "malicious_desertion": [
+        {
+          "case_name": "Silva Vs. Misinona",
+          "citation": "26 N.L.R. 113",
+          "principle": "Desertion to be ground of divorce must be deliberate, malicious, unconscientious and define and final repudiation of the obligations of the marriage state. It must be contumacious acts.",
+          "topic": "Desertion - Requirements"
+        },
+        {
+          "case_name": "Goonawardana Vs. Wikramasinghe",
+          "citation": "34 N.L.R. 5",
+          "principle": "In an action for divorce on the ground of malicious desertion, the desertion must be of such character as would justify the inference that the spouse who is alleged to have deserted the other, did so deliberately and with the intention of repudiating the marriage tie.",
+          "topic": "Malicious Desertion - Character"
+        },
+        {
+          "case_name": "Ramalingam Vs. Ramalingam",
+          "citation": "35 N.C.R. 174",
+          "principle": [
+            "Where a woman leaves her husband finally against his will and without legal justification, her desertion would in law be malicious.",
+            "In Roman Dutch law no divorce should be granted on the ground of malicious desertion whilst there remained any hope of reconciliation."
+          ],
+          "topic": "Malicious Desertion - Reconciliation"
+        },
+        {
+          "case_name": "Wijeratne Vs. Wijeratne",
+          "citation": "47 N.L.R. 324",
+          "principle": "Where there was no consummation of a marriage owing to the wilful refusal of the husband to copulate. Held, that the wife was entitled to have the marriage dissolved on the ground of malicious desertion.",
+          "topic": "Malicious Desertion - Refusal to Copulate"
+        },
+        {
+          "case_name": "De Mel Vs. De Mel",
+          "citation": "54 N.L.R. 91",
+          "principle": "Where a husband suspected without reasonable grounds that his wife had committed adultery and ordered her to leave the house and refuse to be reconciled to her unless she gave a written confession of adultery. Held, that there was malicious desertion on the part of the husband.",
+          "topic": "Malicious Desertion - Unfounded Suspicion"
+        },
+        {
+          "case_name": "Ariyapala Vs. Ariyapala",
+          "citation": "65 N.L.R. 453",
+          "principle": "Where the break up of a marriage and the departure of the husband from the wife is due to the violent conduct on the part of the wife which is not justified by the behaviour of the husband, the husband may sue for divorce on the ground of malicious desertion.",
+          "topic": "Malicious Desertion - Violent Conduct"
+        },
+        {
+          "case_name": "Canekeratne Vs. Canekeratne",
+          "citation": "66 N.L.R. 380",
+          "principle": [
+            "A consensual separation between husband and wife can change its quality and malicious desertion can supervene if an animus deserendi supervenes.",
+            "When either spouse has made an offer to resume cohabitation after a separation has taken place, a rejection of it by the other will turn him or her into a deserter.",
+            "Divorce should not be granted while there remains a hope of reconciliation. The conduct of the parties up to and including the time of the trial is relevant to the question of malicious desertion."
+          ],
+          "topic": "Reconciliation and Malicious Desertion"
+        },
+        {
+          "case_name": "Muthukumarasamy Vs. Parameshwary",
+          "citation": "78 N.L.R. 488",
+          "principle": "Termination of malicious desertion can take place by a supervening animus revertendi coupled with a bona fide approach to the deserted spouse with a view to resumption of life together. Where the deserting spouse makes a genuine offer to return to the matrimonial home with a view to resumption of life together, the deserted spouse cannot lawfully refuse re-instatement. A deserted spouse must always, until presentation of his plaint, affirm the marriage and be ready to take back the deserting spouse.",
+          "topic": "Termination of Malicious Desertion"
+        },
+        {
+          "case_name": "Anulawathee Vs. Gunapala",
+          "citation": "1998 (1) S.L.R. 63",
+          "principle": "It is to be observed that when a party seeks a divorce on the ground of constructive malicious desertion what is required to be proved is that, the innocent party was obliged to leave the matrimonial home as a direct consequence of the expulsive acts of the other party.",
+          "topic": "Constructive Malicious Desertion - Proof"
+        }
+      ],
+      "condonation_and_connivance": [
+        {
+          "case_name": "Dias Vs. Mensaline Hamine",
+          "citation": "46 N.L.R. 193",
+          "principle": [
+            "The fact that a wife after knowledge of her husband's adultery shares his bed is not strong or conclusive proof of condonation.",
+            "Still less, the fact that she merely resided in the same house with her husband. There should be, in addition, proof of forgiveness and of the reinstatement of the offending spouse."
+          ],
+          "topic": "Condonation - Sharing Bed"
+        },
+        {
+          "case_name": "Baptiste Vs. Selvarajah",
+          "citation": "59 N.L.R. 284",
+          "principle": [
+            "The mere fact that the spouses continue to live under the same roof does not necessarily show condonation of adultery, for the parties may do so by force of circumstances and not as the result of a true reconciliation.",
+            "Since reconciliation involves a mutual intention on the part of both spouses to restore what was sundered, an invitation by the innocent spouse to have intercourse which is rejected by the guilty spouse does not constitute condonation of adultery."
+          ],
+          "topic": "Reconciliation and Condonation"
+        },
+        {
+          "case_name": "Muthubanda Vs. Jayawardena",
+          "citation": "1986 (2) C.A.L.R. 203",
+          "principle": "Condonation and connivance not being bars applicable any more under the Administration of Justice Law (The law applicable) for obtaining matrimonial relief will not be relevant as a defence to an action for damages.",
+          "topic": "Condonation and Connivance - Defence"
+        }
+      ],
+      "cruelty": [
+        {
+          "case_name": "Wijesinghe Vs. Wijesinghe",
+          "citation": "57 N.L.R. 489",
+          "principle": [
+            "Cruelty as a ground for a decree of judicial separation, need not be physical; moral cruelty will suffice.",
+            "To entitle a wife to a decree on this ground it is sufficient for her to show that her husband has been guilty of conduct which has impaired her health and made it intolerable for her to continue to live with him.",
+            "Decree for judicial separation may be entered although the party seeking it is entitled on the evidence to ask for the greater relief of a divorce."
+          ],
+          "topic": "Cruelty - Judicial Separation"
+        }
+      ],
+      "nullity_of_marriage": [
+        {
+          "case_name": "Visvaverni Vs. Murugiah",
+          "citation": "60 N.L.R. 541",
+          "facts": "Plaintiff sued for a declaration of nullity of marriage on the ground that the defendant wife was pregnant by another man at the time of marriage and that she concealed the fact of pregnancy from the plaintiff. The marriage was solemnized on January 18, 1951 and a child was born to the defendant on June 18, 1951.",
+          "held": [
+            "That in the circumstances, the plaintiff was entitled to judgment in his favour.",
+            "Further, that assuming that section 600 of the Civil Procedure Code applies even in action for declaration of nullity of marriage, prenuptial stuprum of which the husband becomes aware only after marriage can be condoned only in the same way as adultery can be condoned under section 602(2)."
+          ],
+          "principle": "Concealment of pregnancy by another man at time of marriage is grounds for nullity; prenuptial stuprum condonation follows adultery condonation rules.",
+          "topic": "Nullity of Marriage - Pregnancy",
+          "relevant_section": "600"
+        },
+        {
+          "case_name": "Dayawathie Vs. Gunaratne",
+          "citation": "70 N.L.R. 260",
+          "facts": "A wife, who was 18 years old at the time of her marriage, which was registered, sued her husband subsequently praying for a declaration that the marriage was null and void on the ground that her father's consent to the marriage had not been obtained.",
+          "held": "That sections 42 and 46 of the Marriage Registration Ordinance (Cap. 112) debarred the marriage from being declared invalid.",
+          "principle": "Lack of parental consent for a minor's marriage does not invalidate a registered marriage under the Marriage Registration Ordinance.",
+          "topic": "Nullity of Marriage - Father's Consent",
+          "relevant_laws": ["Sections 42 and 46 - Marriage Registration Ordinance (Cap. 112)"]
+        },
+        {
+          "case_name": "Peiris Vs. Peiris",
+          "citation": "1978/79 S.L.R. 55",
+          "principle": [
+            "That when section 626(1) of the Administration of Justice Law empowered the District Court to enter a decree of nullity of marriage on any ground set out in the Marriage Registration Ordinance, this did not expressly exclude the other grounds recognized by the Roman Dutch Law as being adequate to found a suit for nullity of marriage.",
+            "The Court could still exercise its matrimonial jurisdiction in its fullest amplitude although the procedural provisions in regard to the grounds of nullity, unlike the wide language of section 607(2) of the Civil Procedure Code, covered only those set out in the Marriage Registration Ordinance."
+          ],
+          "topic": "Nullity of Marriage - Jurisdiction",
+          "relevant_laws": ["Section 626(1) - Administration of Justice Law", "Section 607(2) - Civil Procedure Code"]
+        }
+      ],
+      "customary_marriage_and_presumption": [
+        {
+          "case_name": "Soosaipillai Vs. Parpathipillai",
+          "citation": "1985 (2) S.L.R. 55",
+          "principle": [
+            "Where a man and woman are proved to have lived together as man and wife, the law will presume, unless the contrary be clearly proved, that they were living together in consequence of a valid marriage and not in a state of concubinage.",
+            "As to what constitutes a valid customary marriage must necessarily vary from region to region, community to community and race to race, and depending on the affluence of the parties, even within the same group there could be varying degrees of elaboration and embellishments in the ceremonies constituting marriage.",
+            "But some minimum ritual would be necessary by way of constituting the bare essentials of a valid customary marriage. In the present case it was the ceremonial partaking of a common meal of rice and seven vegetables before the relations. It follows that this ceremony of thus bringing together the parties was a ceremony of valid marriage for no ceremony is prescribed for embarking on concubinage."
+          ],
+          "topic": "Customary Marriage - Ceremony"
+        },
+        {
+          "case_name": "Sediris Vs. Roslin",
+          "citation": "78 N.L.R. 547",
+          "principle": [
+            "Where a man and a woman belonging to two different castes are proved to have lived together as man and wife for many years and where there is evidence that relatives and friends of the man had ostracized him from their society. Held, the association between the parties attracted the presumption of marriage which could be rebutted only by strong and cogent evidence.",
+            "The test is whether the conduct of the parties produced among their relatives and friends a general belief that they were really married. Ordinarily, in the case of parties of the same caste, their relations and friends acknowledge and recognize their marriage by visiting them and mixing with them in their social ceremonies. But, if a person marries outside his caste beneath his social status, his relatives and friends disapprove that marriage and manifest their disapproval by ostracizing him from their society. The recognition they give to such a marriage is in the shape of outcasting him and boycotting him from their social functions. This negative conduct is exhibited only if the parties are married and not if they live in concubinage."
+          ],
+          "topic": "Presumption of Marriage - Different Castes"
+        },
+        {
+          "case_name": "Kandiah Vs. Thangamany",
+          "citation": "55 N.L.R. 568",
+          "principle": "The presumption of marriage by habit and repute cannot prevail where there is evidence that the parties had gone through a marriage ceremony and that the solemnization was invalid for the reason that one of the parties was, at the time of the ceremony, already lawfully married. Cohabitation of the parties and general recognition of them as husband and wife subsequent to the dissolution of the prior marriage are inadequate in law for the application of the doctrine of presumption of marriage.",
+          "topic": "Presumption of Marriage - Prior Marriage"
+        },
+        {
+          "case_name": "Wijegunawardena Vs. Gracia Catherine",
+          "citation": "1984 (2) S.L.R. 381",
+          "court": "Court of Appeal",
+          "principle": "In view of the admission that there was no valid marriage under the Marriage Registration Ordinance, the only presumption the parties can contend for is a presumption in favour of a customary marriage. When a party fails to establish a customary marriage, the resumption of a valid marriage is rebutted and a marriage (by habit and repute) is not established by the parties living together as husband and wife.",
+          "topic": "Customary Marriage - Presumption"
+        },
+        {
+          "case_name": "Gracia Catherine Vs. Wijegunawardena",
+          "citation": "1986 (2) S.L.R. 190",
+          "court": "Supreme Court",
+          "principle": [
+            "A marriage solemnized according to the customs, rites and ceremonies of the Roman Catholic Church has legal validity irrespective of legal registration thereof and is regarded as a lawful marriage on the basis of it being a customary marriage recognized in law.",
+            "Although the plaintiff was a Buddhist, he intended to marry in the Church, got permission from the Catholic Bishop to marry the defendant and voluntarily chose to go through the catholic ceremonies and subsequently lived with the defendant as husband and wife. He is therefore bound by the marriage which took place according to the customary rites of the church. The onus was on the plaintiff to show that the requisites of a catholic customary marriage were not performed and this burden he has failed to discharge."
+          ],
+          "topic": "Catholic Customary Marriage"
+        }
+      ],
+      "muslim_law": [
+        {
+          "case_name": "Noorul Naleefa Vs. Marika Hadjiar",
+          "citation": "48 N.L.R. 529",
+          "principle": [
+            "The provisions of Chapter 99 of the legislative Enactments do not preclude a muslim wife from bringing an action in the District Court for a dissolution of marriage on the ground of leprosy of the husband.",
+            "The principle of the Muslim law that leprosy is a ground of repudiating the contract of marriage is still part of the law of Ceylon."
+          ],
+          "topic": "Muslim Law - Leprosy as Ground"
+        }
+      ],
+      "jurisdiction_and_procedure": [
+        {
+          "case_name": "Thiagarajah Vs. Karthigesu",
+          "citation": "69 N.L.R. 73",
+          "principle": "Where the question at issue is whether a marriage was celebrated according to custom, and the evidence shows that the parties have neither cohabited for a single day nor even lived together under the same roof, there is no presumption in favour of their marriage. In such a case, proof of marriage depends solely on evidence to the effect that a valid ceremony of marriage was actually performed.",
+          "topic": "Proof of Marriage - Custom"
+        },
+        {
+          "case_name": "Hunter Vs. Sri Chandrasekera",
+          "citation": "52 N.L.R. 54",
+          "principle": "Person asks for a vesting order under section 112 of the Trusts Ordinance, without asking for any further remedy on a cause of action, the procedure must be by way of summary procedure and not by way of regular action.",
+          "topic": "Vesting Order - Procedure",
+          "relevant_section": "112 - Trusts Ordinance"
+        }
+      ],
+      "consummation": [
+        {
+          "case_name": "Mohiti Appu Vs. Kiribanda",
+          "citation": "25 N.L.R. 221",
+          "principle": [
+            "The refusal of the husband to consummate a marriage does not amount to a tort giving rise to a claim of damages.",
+            "Refusal to cohabit, that is, to consummate the marriage amounts in law to desertion and entitles the wife to obtain a dissolution of the marriage."
+          ],
+          "topic": "Refusal to Consummate Marriage"
+        }
+      ],
+      "alimony_and_financial": [
+        {
+          "case_name": "De Alwis Vs. Wickramasinghe",
+          "citation": "2000 (2) S.L.R. 10",
+          "facts": "While the said appeals were pending, the 1st defendant (wife) made an application to the District Court of Kandy for sequestration of a sum of Rs. 1,618,709.46 out of Rs. 4,000,000/- which the plaintiff-petitioner had deposited with a Finance Company. After the death of the 1st respondent (wife), the plaintiff-petitioner made an application seeking an order that the said sum should be released to the petitioner.",
+          "held": [
+            "Where one of the spouses dies after a decree of divorce has been entered and while the appeal against the decree is pending, the appeal falls away and the decree stands, but the surviving spouse or the executor may continue the appeal if this is necessary in order to have the property rights of the spouses and their heirs determined.",
+            "In this case, a decree for divorce and a decree for payment of money were made against the Petitioner. The decree for money is under several heads - permanent alimony, monies taken from the 1st defendant's savings account, payment in respect of 1st defendant's house, which had been sold and money taken by the petitioner.",
+            "Where alimony is concerned, it is purely a personal right which subsists only so far as the wife is entitled to support. It ceases on her demise. The claim to alimony being of a personal nature extinguishes with the death of the wife, and the decree for alimony ceased to be executable.",
+            "Apart from the alimony ordered, the rest of the money forms part of the estate of the deceased and should be remitted to the testamentary case."
+          ],
+          "principle": "Alimony is a personal right that extinguishes upon the death of the entitled spouse; other monetary awards form part of the deceased's estate.",
+          "topic": "Alimony - Death of Spouse"
+        }
+      ]
+    },
+    "key_principles_summary": {
+      "grounds_for_divorce_sri_lanka": [
+        "Adultery after marriage",
+        "Malicious Desertion (actual and constructive)",
+        "Incurable Impotency at the time of marriage"
+      ],
+      "standard_of_proof": "Adultery must be proved beyond reasonable doubt, the same standard as in criminal cases",
+      "procedure_requirement": "All matrimonial actions must follow the procedure in Section 596 of the Civil Procedure Code",
+      "jurisdiction_rule": "District Court has jurisdiction irrespective of where marriage was contracted",
+      "reconciliation_principle": "Divorce should not be granted while there remains hope of reconciliation",
+      "damages_principle": "Damages in adultery cases are compensatory, not punitive; based on actual value and injury to feelings"
+    },
+    "topics_covered": [
+      "Adultery",
+      "Malicious Desertion",
+      "Constructive Malicious Desertion",
+      "Cruelty",
+      "Nullity of Marriage",
+      "Judicial Separation",
+      "Damages",
+      "Co-respondent",
+      "Condonation",
+      "Reconciliation",
+      "Customary Marriage",
+      "Presumption of Marriage",
+      "Jurisdiction",
+      "Alimony",
+      "Consummation",
+      "Muslim Law",
+      "Catholic Marriage",
+      "Evidence",
+      "Procedure",
+      "Separation Agreements",
+      "Vesting Orders"
+    ],
+    "relevant_legislations": [
+      "Civil Procedure Code - Chapter XLII (Sections 596-608)",
+      "Marriages (General) Ordinance",
+      "Marriage Registration Ordinance (Cap. 112)",
+      "Judicature Act",
+      "Judicature (Amendment) Act No. 71 of 1981",
+      "Administration of Justice Law",
+      "Trusts Ordinance",
+      "Law No. 20 of 1977 (Amending Law)"
+    ]
+  }
+}

@@ -6,6 +6,7 @@ from fastapi import HTTPException, status, Depends
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from sqlalchemy.orm import Session
 import hashlib
+import uuid
 
 import database
 from models import User
@@ -59,12 +60,16 @@ def decode_access_token(token: str) -> TokenData:
     
     try:
         payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
-        user_id: str = payload.get("sub")
+        user_id = payload.get("sub")
         email: str = payload.get("email")
         
         if user_id is None:
             raise credentials_exception
-        
+
+        # ✅ FIX: Keep as string (UUID), do NOT convert to int
+        # User.id is UUID string: "46285991-80de-4b69-af5e-de6e307e8eb0"
+        user_id = str(user_id)
+
         return TokenData(user_id=user_id, email=email)
     
     except JWTError:
@@ -77,8 +82,13 @@ def get_current_user(
     """Dependency to get the current authenticated user"""
     token = credentials.credentials
     token_data = decode_access_token(token)
-    
+
+    # ✅ FIX: Query by both id AND email as fallback
     user = db.query(User).filter(User.id == token_data.user_id).first()
+
+    # Fallback: try matching by email if UUID comparison fails
+    if user is None and token_data.email:
+        user = db.query(User).filter(User.email == token_data.email).first()
     
     if user is None:
         raise HTTPException(
@@ -89,7 +99,7 @@ def get_current_user(
     if not user.is_active:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="Inactive user account"
+            detail="Inactive user account. Contact support."
         )
     
     return user

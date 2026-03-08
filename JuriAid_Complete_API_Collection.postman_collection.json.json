@@ -1,7 +1,7 @@
 {
   "info": {
-    "name": "JuriAid - Complete API Collection v2.3",
-    "description": "Full API Collection for all 5 JuriAid Backend Microservices. v2.3: Added memory endpoints, multi-agent logging, Redis support.",
+    "name": "JuriAid - Complete API Collection v2.4",
+    "description": "Full API Collection for all 5 JuriAid Backend Microservices. v2.4: Updated response schemas to match actual service outputs.",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
   "variable": [
@@ -160,18 +160,26 @@
           }
         },
         {
-          "name": "Case Laws - Upload PDF",
+          "name": "Case Law Retrieve - Upload PDF",
           "request": {
             "method": "POST",
             "header": [],
             "body": {
               "mode": "formdata",
               "formdata": [
-                { "key": "file", "type": "file", "src": "", "description": "Upload case PDF to extract applicable laws" },
-                { "key": "as_of_date", "value": "today", "type": "text" }
+                { "key": "file", "type": "file", "src": "", "description": "Upload case PDF to retrieve relevant case laws" },
+                { "key": "top_k", "value": "5", "type": "text" }
               ]
             },
-            "url": { "raw": "{{lawstatkg_url}}/case/laws", "host": ["{{lawstatkg_url}}"], "path": ["case","laws"] }
+            "url": { "raw": "{{lawstatkg_url}}/case-law/retrieve", "host": ["{{lawstatkg_url}}"], "path": ["case-law","retrieve"] }
+          }
+        },
+        {
+          "name": "Get Case Law Detail by ID",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": { "raw": "{{lawstatkg_url}}/case-law/civil_procedure_code_matrimonial_actions_s602_7f6275b4b939", "host": ["{{lawstatkg_url}}"], "path": ["case-law","civil_procedure_code_matrimonial_actions_s602_7f6275b4b939"] }
           }
         },
         {
@@ -201,13 +209,21 @@
       "name": "❓ 4. Question Generator (Port 8004)",
       "item": [
         {
+          "name": "Health Check",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": { "raw": "{{questiongen_url}}/health", "host": ["{{questiongen_url}}"], "path": ["health"] }
+          }
+        },
+        {
           "name": "Generate Legal Questions",
           "request": {
             "method": "POST",
             "header": [{ "key": "Content-Type", "value": "application/json" }],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"case_text\": \"The petitioner Kumari Silva married the respondent Nimal Silva on 15th March 2018 at Colombo District Court. The respondent has been guilty of adultery since January 2022 and abandoned the matrimonial home in June 2023.\",\n  \"law\": \"Matrimonial Causes Ordinance No. 15 of 1907 - Section 19 Adultery, Section 20 Desertion.\",\n  \"cases\": \"Fernando v Fernando (2019) - divorce on adultery and desertion grounds.\"\n}"
+              "raw": "{\n  \"case_text\": \"The petitioner Kumari Silva married the respondent Nimal Silva on 15th March 2018 at Colombo District Court. The respondent has been guilty of adultery since January 2022 and abandoned the matrimonial home in June 2023.\",\n  \"law\": \"- Muthuranee Vs. Thuraisingham: The amendment introducing section 608(2)(b) into the Civil Procedure Code created a new ground of divorce for the future.\\n- Asoken nee Kandasamy Vs. Asokan: Malicious desertion (constructive) is a valid ground for dissolution of marriage.\",\n  \"cases\": \"1. D/9430 - Versus:\\nIn the District Court of Matara. Senduru Arachchige Indunil Versus...\\n2. D/9323 - Versus:\\nIn the District Court of Matara. Dikwella, Urugamuwa...\"\n}"
             },
             "url": { "raw": "{{questiongen_url}}/generate-questions", "host": ["{{questiongen_url}}"], "path": ["generate-questions"] }
           }
@@ -244,7 +260,7 @@
           "response": [
             {
               "name": "Success 200", "status": "OK", "code": 200,
-              "body": "{ \"analysis_id\": \"...\", \"status\": \"completed\", \"case_summary\": \"## Case Overview\\n...\", \"similar_cases\": [{\"case_id\":\"\",\"case_name\":\"\",\"score\":0.75,\"summary\":\"\",\"reason\":\"\"}], \"relevant_laws\": [{\"act_id\":\"\",\"title\":\"\",\"section\":\"\",\"section_title\":\"\",\"relevance_score\":0.5,\"content\":\"\"}], \"generated_questions\": [{\"question_id\":1,\"question\":\"...\"}] }"
+              "body": "{\n  \"analysis_id\": \"...\",\n  \"status\": \"completed\",\n  \"case_summary\": \"## Case Overview\\n...\",\n  \"similar_cases\": [\n    {\n      \"case_id\": \"\",\n      \"case_name\": \"D/9430 - Versus\",\n      \"score\": 0.95,\n      \"reason\": \"Very similar factual background. Similar legal reasoning.\",\n      \"judgment_preview\": \"In the District Court of Matara...\",\n      \"shared_issues\": [],\n      \"breakdown\": { \"facts\": 1.0, \"issues\": 0.99, \"arguments\": 0.99, \"decisions\": 0.99 },\n      \"view_case_details\": \"/case/abc123\",\n      \"view_full_case_file\": \"/case-file/abc123\"\n    }\n  ],\n  \"relevant_laws\": [\n    {\n      \"case_id\": \"civil_procedure_code_matrimonial_actions_s602_7f6275b4b939\",\n      \"case_name\": \"Muthuranee Vs. Thuraisingham\",\n      \"citation\": \"1984 (1) S.L.R. 381\",\n      \"topic\": \"Separation - Seven Years Period\",\n      \"section_number\": \"602\",\n      \"section_title\": \"Decree for Dissolution of Marriage\",\n      \"principle\": [\"The amendment introducing section 608(2)(b)...\"],\n      \"held\": [],\n      \"facts\": \"\",\n      \"referenced_laws\": [],\n      \"relevant_sections\": [\"608(2)(b)\"],\n      \"court\": \"\",\n      \"amending_law\": \"\",\n      \"confidence_score\": 1.185,\n      \"support_score\": 0.479,\n      \"query_hits\": 2,\n      \"detail_url\": \"/case-law/civil_procedure_code_matrimonial_actions_s602_7f6275b4b939\"\n    }\n  ],\n  \"generated_questions\": [\n    { \"question_id\": 1, \"question\": \"Did the respondent commit adultery as defined by Section 19?\" }\n  ],\n  \"metadata\": {\n    \"filename\": \"case.pdf\",\n    \"file_size_mb\": 0.5,\n    \"text_length\": 3000,\n    \"user_id\": 1,\n    \"user_prompt\": \"Analyze this case\",\n    \"saved_for_reference\": false\n  },\n  \"processing_time_seconds\": 15.2\n}"
             },
             {
               "name": "Invalid Case Type 422", "status": "Unprocessable Entity", "code": 422,
