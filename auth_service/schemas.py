@@ -8,6 +8,7 @@ class UserCreate(BaseModel):
     password: str = Field(..., min_length=6, description="Minimum 6 characters")
     full_name: Optional[str] = Field(None, max_length=255)
     phone: Optional[str] = Field(None, max_length=20)
+    profile_icon_url: Optional[str] = Field(None, max_length=500)
 
 class UserLogin(BaseModel):
     """Schema for user login"""
@@ -18,6 +19,7 @@ class UserUpdate(BaseModel):
     """Schema for updating user profile"""
     full_name: Optional[str] = Field(None, max_length=255)
     phone: Optional[str] = Field(None, max_length=20)
+    profile_icon_url: Optional[str] = Field(None, max_length=500)
 
 class UserResponse(BaseModel):
     """Schema for user data in responses"""
@@ -30,6 +32,7 @@ class UserResponse(BaseModel):
     created_at: datetime
     last_login: Optional[datetime]
     is_active: bool
+    profile_icon_url: Optional[str] = None
 
     class Config:
         from_attributes = True
@@ -42,7 +45,7 @@ class Token(BaseModel):
 
 class TokenData(BaseModel):
     """Schema for decoded JWT token data"""
-    user_id: Optional[str] = None
+    user_id: str  # ✅ Must be str, not int — User IDs are UUIDs
     email: Optional[str] = None
 
 class MessageResponse(BaseModel):
