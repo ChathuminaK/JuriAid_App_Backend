@@ -6,3 +6,4 @@ sentence-transformers
 pymupdf
 numpy
 python-multipart
+pymongo

@@ -8,8 +8,8 @@ NEO4J_USER = os.getenv("NEO4J_USER")
 NEO4J_PASSWORD = os.getenv("NEO4J_PASSWORD")
 
 WEIGHTS = {
-    "facts": 0.35,
-    "issues": 0.25,
-    "arguments": 0.20,
-    "decisions": 0.20
+    "facts": 0.30,
+    "issues": 0.30,
+    "arguments": 0.25,
+    "decisions": 0.15
 }
