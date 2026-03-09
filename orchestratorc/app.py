@@ -106,14 +106,6 @@ async def analyze_case(
     ),
     user: dict = Depends(verify_token),
 ):
-    """
-    POST /api/analyze — Main multi-agent analysis pipeline.
-
-    Agent Flow:
-      ValidationAgent → OrchestratorAgent → IntentDetectionAgent → MemoryAgent →
-      [CaseRetrievalAgent || LawRetrievalAgent] → SummaryAgent →
-      QuestionGenAgent → SynthesisAgent → MemoryAgent
-    """
     user_id = user.get("sub", 0)
     logger.info(f"[OrchestratorAgent] Received analysis request | user={user_id} | file={file.filename}")
 
@@ -122,17 +114,23 @@ async def analyze_case(
         pdf_bytes = await _validate_pdf(file)
         logger.info(f"[OrchestratorAgent] PDF validated ({len(pdf_bytes) / 1024:.1f} KB)")
 
-        # Step 2: Extract text
+        # Step 2: Check Redis cache
+        from orchestrator.redis_cache import hash_file, get_cached, save_to_cache
+        file_hash = hash_file(pdf_bytes)
+        cached = get_cached(user_id, file_hash)
+        if cached:
+            logger.info(f"[OrchestratorAgent] Returning cached result for user={user_id}")
+            return AnalysisResponse(**cached)
+
+        # Step 3: Extract text
         logger.info(f"[OrchestratorAgent] Extracting text from PDF")
         case_text = extract_text_from_pdf(pdf_bytes)
 
-        # Step 3: ValidationAgent — Ensure it's a Sri Lankan divorce case
+        # Step 4: ValidationAgent
         logger.info(f"[ValidationAgent] Validating case type (Sri Lankan divorce only)")
         is_valid, validation_details = validate_divorce_case(case_text)
         if not is_valid:
-            logger.warning(
-                f"[ValidationAgent] ✗ Rejected: {validation_details.get('reason')}"
-            )
+            logger.warning(f"[ValidationAgent] ✗ Rejected: {validation_details.get('reason')}")
             raise HTTPException(
                 status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
                 detail={
@@ -147,7 +145,7 @@ async def analyze_case(
             f"{validation_details.get('strong_matches', 0)} strong indicators)"
         )
 
-        # Step 4: Run multi-agent pipeline
+        # Step 5: Run multi-agent pipeline
         result = await run_analysis_pipeline(
             pdf_bytes=pdf_bytes,
             filename=file.filename or "upload.pdf",
@@ -155,6 +153,9 @@ async def analyze_case(
             user_id=user_id,
             pre_extracted_text=case_text,
         )
+
+        # Step 6: Save to Redis cache
+        save_to_cache(user_id, file_hash, result.model_dump())
 
         return result
 
@@ -228,3 +229,44 @@ async def clear_session_history(session_id: str, user: dict = Depends(verify_tok
     logger.info(f"[MemoryAgent] Clear history for session {session_id[:8]}...")
     clear_conversation(session_id)
     return {"session_id": session_id, "cleared": True}
+
+
+# ---------- Saved Reports Endpoints ----------
+
+@app.post("/api/reports/save")
+async def save_report_endpoint(
+    report: AnalysisResponse,
+    user: dict = Depends(verify_token),
+):
+    """Save an analysis report for the authenticated user."""
+    user_id = user.get("sub", 0)
+    from orchestrator.redis_cache import save_report
+    ok = save_report(user_id, report.model_dump())
+    if not ok:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Redis unavailable — report could not be saved",
+        )
+    logger.info(f"[OrchestratorAgent] Report saved | user={user_id} | id={report.analysis_id[:8]}")
+    return {"saved": True, "analysis_id": report.analysis_id}
+
+
+@app.get("/api/reports")
+async def get_reports_endpoint(user: dict = Depends(verify_token)):
+    """Get all saved reports for the authenticated user."""
+    user_id = user.get("sub", 0)
+    from orchestrator.redis_cache import get_saved_reports
+    reports = get_saved_reports(user_id)
+    return {"reports": reports, "count": len(reports)}
+
+
+@app.delete("/api/reports/{analysis_id}")
+async def delete_report_endpoint(
+    analysis_id: str,
+    user: dict = Depends(verify_token),
+):
+    """Delete a saved report by analysis_id for the authenticated user."""
+    user_id = user.get("sub", 0)
+    from orchestrator.redis_cache import delete_saved_report
+    ok = delete_saved_report(user_id, analysis_id)
+    return {"deleted": ok, "analysis_id": analysis_id}
