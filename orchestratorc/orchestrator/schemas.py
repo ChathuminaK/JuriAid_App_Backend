@@ -59,7 +59,7 @@ class AnalysisMetadata(BaseModel):
     filename: str
     file_size_mb: float
     text_length: int
-    user_id: int
+    user_id: str
     user_prompt: str
     saved_for_reference: bool = False
 
@@ -74,6 +74,7 @@ class AnalysisResponse(BaseModel):
     metadata: Optional[AnalysisMetadata] = None
     created_at: str = Field(default_factory=lambda: datetime.utcnow().isoformat() + "Z")
     processing_time_seconds: float = 0.0
+    pipeline_metrics: Optional[PipelineMetrics] = None
 
 
 class CaseSaveResponse(BaseModel):
@@ -86,3 +87,16 @@ class HealthResponse(BaseModel):
     status: str = "healthy"
     service: str = "JuriAid Orchestrator"
     version: str = "2.0.0"
+
+
+class PipelineMetrics(BaseModel):
+    total_time_seconds: float = 0.0
+    agents_invoked: int = 0
+    agents_succeeded: int = 0
+    case_retrieval_count: int = 0
+    avg_similarity_score: float = 0.0
+    law_retrieval_count: int = 0
+    avg_confidence_score: float = 0.0
+    summary_length: int = 0
+    questions_count: int = 0
+    cache_hit: bool = False

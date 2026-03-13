@@ -64,7 +64,13 @@ def _get_redis():
 
     try:
         import redis as redis_lib
-        client = redis_lib.from_url(settings.REDIS_URL, decode_responses=True)
+        client = redis_lib.Redis(
+            host=settings.REDIS_HOST,
+            port=settings.REDIS_PORT,
+            password=settings.REDIS_PASSWORD,
+            decode_responses=True,
+            socket_connect_timeout=5,
+        )
         client.ping()
         logger.info("[MemoryAgent] Long-term memory: Redis CONNECTED ✅")
         _redis_client = client
