@@ -7,14 +7,17 @@ import os
 
 from app.hybrid_search import HybridSearchEngine, clean_query, today_str
 from app.kg_client import KGClient
-from app.case_api import router as case_router
+
+from app.case_law_engine import CaseLawSearchEngine
+from app.case_law_api import router as case_law_router
 
 app = FastAPI(title="LawStatKG API", version="1.0.0")
 
-# ✅ Register the case upload routes
-app.include_router(case_router)
+# register case-law upload/retrieval route
+app.include_router(case_law_router)
 
 engine = HybridSearchEngine()
+case_law_engine = CaseLawSearchEngine()
 kg: Optional[KGClient] = None
 
 DATE_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
@@ -39,8 +42,12 @@ class SearchRequest(BaseModel):
 def startup():
     global kg
     kg = KGClient()
+
     allow_build = os.getenv("ALLOW_BUILD_ON_STARTUP", "false").lower() == "true"
     engine.load(allow_build=allow_build)
+
+    # load separate case-law artifacts
+    case_law_engine.load()
 
 
 @app.on_event("shutdown")
@@ -52,7 +59,12 @@ def shutdown():
 
 @app.get("/health")
 def health():
-    return {"status": "ok", "neo4j": kg.ping() if kg else False, "search_loaded": engine.ready}
+    return {
+        "status": "ok",
+        "neo4j": kg.ping() if kg else False,
+        "search_loaded": engine.ready,
+        "case_law_search_loaded": case_law_engine.ready,
+    }
 
 
 @app.post("/Lawsearch")

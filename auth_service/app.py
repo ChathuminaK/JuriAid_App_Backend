@@ -4,6 +4,8 @@ from sqlalchemy.orm import Session
 from datetime import timedelta
 from typing import List
 from fastapi.responses import JSONResponse
+from fastapi.staticfiles import StaticFiles
+import os, uuid
 
 import database
 from models import User
@@ -228,3 +230,8 @@ async def general_exception_handler(request, exc: Exception):
             "error": str(exc)
         }
     )
+
+# File upload endpoint
+UPLOAD_DIR = os.path.join(os.path.dirname(__file__), "uploads", "profile_icons")
+os.makedirs(UPLOAD_DIR, exist_ok=True)
+app.mount("/static", StaticFiles(directory=os.path.join(os.path.dirname(__file__), "uploads")), name="static")

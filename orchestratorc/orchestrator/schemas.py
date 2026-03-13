@@ -27,31 +27,39 @@ class SimilarCase(BaseModel):
     case_id: str = ""
     case_name: str = ""
     score: float = 0.0
-    summary: str = ""
     reason: str = ""
-    complaint: str = ""
-    defense: str = ""
+    judgment_preview: str = ""
+    shared_issues: list[str] = Field(default_factory=list)
+    breakdown: dict = Field(default_factory=dict)
+    view_case_details: str = ""
+    view_full_case_file: str = ""
 
 
 class RelevantLaw(BaseModel):
-    act_id: str = ""
-    title: str = ""
-    section: str = ""
+    case_id: str = ""
+    case_name: str = ""
+    citation: str = ""
+    topic: str = ""
+    section_number: str = ""
     section_title: str = ""
-    relevance_score: float = 0.0
-    content: str = ""
-
-
-class GeneratedQuestion(BaseModel):
-    question_id: int
-    question: str
+    principle: list[str] = Field(default_factory=list)
+    held: list[str] = Field(default_factory=list)
+    facts: str = ""
+    referenced_laws: list[str] = Field(default_factory=list)
+    relevant_sections: list[str] = Field(default_factory=list)
+    court: str = ""
+    amending_law: str = ""
+    confidence_score: float = 0.0
+    support_score: float = 0.0
+    query_hits: int = 0
+    detail_url: str = ""
 
 
 class AnalysisMetadata(BaseModel):
     filename: str
     file_size_mb: float
     text_length: int
-    user_id: int
+    user_id: str
     user_prompt: str
     saved_for_reference: bool = False
 
@@ -62,10 +70,11 @@ class AnalysisResponse(BaseModel):
     case_summary: str = ""
     similar_cases: list[SimilarCase] = Field(default_factory=list)
     relevant_laws: list[RelevantLaw] = Field(default_factory=list)
-    generated_questions: list[GeneratedQuestion] = Field(default_factory=list)
+    generated_questions: str = ""
     metadata: Optional[AnalysisMetadata] = None
     created_at: str = Field(default_factory=lambda: datetime.utcnow().isoformat() + "Z")
     processing_time_seconds: float = 0.0
+    pipeline_metrics: Optional[PipelineMetrics] = None
 
 
 class CaseSaveResponse(BaseModel):
@@ -78,3 +87,16 @@ class HealthResponse(BaseModel):
     status: str = "healthy"
     service: str = "JuriAid Orchestrator"
     version: str = "2.0.0"
+
+
+class PipelineMetrics(BaseModel):
+    total_time_seconds: float = 0.0
+    agents_invoked: int = 0
+    agents_succeeded: int = 0
+    case_retrieval_count: int = 0
+    avg_similarity_score: float = 0.0
+    law_retrieval_count: int = 0
+    avg_confidence_score: float = 0.0
+    summary_length: int = 0
+    questions_count: int = 0
+    cache_hit: bool = False

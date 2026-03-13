@@ -55,18 +55,18 @@ async def search_similar_cases(pdf_bytes: bytes, filename: str) -> dict:
         raw = resp.json()
         logger.info(f"Past case search returned: {list(raw.keys())}")
 
-        # Normalize similar_cases from PastCase API format
         normalized_cases = []
         for c in raw.get("similar_cases", []):
             normalized_cases.append({
                 "case_id": c.get("case_id", ""),
                 "case_name": c.get("case_name", ""),
                 "score": float(c.get("final_score", c.get("score", 0))),
-                "summary": c.get("summary", ""),
+                "judgment_preview": c.get("judgment_preview", ""),
                 "reason": c.get("reason", ""),
-                "complaint": c.get("complaint", ""),
-                "defense": c.get("defense", ""),
+                "shared_issues": c.get("shared_issues", []),
                 "breakdown": c.get("breakdown", {}),
+                "view_case_details": c.get("view_case_details", ""),
+                "view_full_case_file": c.get("view_full_case_file", ""),
             })
 
         logger.info(f"Found {len(normalized_cases)} similar cases")
@@ -77,6 +77,16 @@ async def search_similar_cases(pdf_bytes: bytes, filename: str) -> dict:
 
     logger.warning("Past case search unavailable - continuing without similar cases")
     return {"similar_cases": [], "new_case_id": ""}
+
+
+async def get_case_judgment(case_id: str) -> dict:
+    """Fetch full case details (judgment, complaint, defense) by case_id."""
+    url = f"{settings.PAST_CASE_SERVICE_URL}/case/{case_id}"
+    resp = await _request_with_retry("GET", url)
+    if resp and resp.status_code == 200:
+        return resp.json()
+    logger.warning(f"Could not fetch case details for {case_id}")
+    return {}
 
 
 async def upload_case_to_kg(pdf_bytes: bytes, filename: str) -> dict:
@@ -97,40 +107,26 @@ async def upload_case_to_kg(pdf_bytes: bytes, filename: str) -> dict:
 # ---------- LawStatKG (Port 8003) ----------
 
 async def get_applicable_laws(pdf_bytes: bytes, filename: str) -> dict:
-    url = f"{settings.LAWSTATKG_SERVICE_URL}/case/laws"
+    url = f"{settings.LAWSTATKG_SERVICE_URL}/case-law/retrieve"
     files = {"file": (filename, pdf_bytes, "application/pdf")}
-    data = {"as_of_date": "today"}
 
-    resp = await _request_with_retry("POST", url, files=files, data=data)
+    resp = await _request_with_retry("POST", url, files=files)
 
     if resp and resp.status_code == 200:
         raw_data = resp.json()
         logger.info(f"LawStatKG response keys: {list(raw_data.keys())}")
 
-        # Normalize each law entry to match our schema
-        normalized_laws = []
-        for law in raw_data.get("relevant_laws", []):
-            normalized_laws.append({
-                "act_id": law.get("act_id", ""),
-                "title": law.get("act_title", law.get("title", "")),
-                "section": law.get("section_no", law.get("section", "")),
-                "section_title": law.get("section_title", ""),
-                "relevance_score": float(law.get("confidence_score", law.get("relevance_score", 0))),
-                "content": law.get("evidence_from_case", law.get("content", "")),
-                "jurisdiction": law.get("jurisdiction", ""),
-            })
-
-        personal_law = raw_data.get("personal_law", "Unknown")
-        logger.info(f"Found {len(normalized_laws)} applicable laws (Personal law: {personal_law})")
+        case_laws = raw_data.get("relevant_case_laws", [])
+        logger.info(f"Found {len(case_laws)} relevant case laws")
 
         return {
-            "applicable_laws": normalized_laws,
-            "personal_law": personal_law,
-            "results_count": raw_data.get("results_count", len(normalized_laws)),
+            "relevant_case_laws": case_laws,
+            "queries_generated": raw_data.get("queries_generated", []),
+            "results_count": raw_data.get("results_count", len(case_laws)),
         }
 
-    logger.warning("LawStatKG unavailable - continuing without applicable laws")
-    return {"applicable_laws": [], "personal_law": "Unknown", "results_count": 0}
+    logger.warning("LawStatKG unavailable - continuing without case laws")
+    return {"relevant_case_laws": [], "queries_generated": [], "results_count": 0}
 
 
 # ---------- Question Generator (Port 8004) ----------
