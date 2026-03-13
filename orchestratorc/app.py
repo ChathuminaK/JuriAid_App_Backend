@@ -270,3 +270,52 @@ async def delete_report_endpoint(
     from orchestrator.redis_cache import delete_saved_report
     ok = delete_saved_report(user_id, analysis_id)
     return {"deleted": ok, "analysis_id": analysis_id}
+
+
+@app.get("/api/metrics")
+async def get_metrics(user: dict = Depends(verify_token)):
+    """Return system metrics for evaluation dashboard."""
+    from orchestrator.redis_cache import _get_client
+    from config import get_settings
+    s = get_settings()
+    
+    redis_status = "disabled"
+    if s.REDIS_ENABLED:
+        try:
+            _get_client().ping()
+            redis_status = "connected"
+        except Exception:
+            redis_status = "error"
+    
+    return {
+        "service": "JuriAid Orchestrator",
+        "version": "2.3.0",
+        "architecture": {
+            "framework": "LangChain",
+            "llm": "Gemini 2.5 Flash",
+            "agents": [
+                "OrchestratorAgent", "IntentDetectionAgent", "ValidationAgent",
+                "CaseRetrievalAgent", "LawRetrievalAgent", "SummaryAgent",
+                "QuestionGenAgent", "SynthesisAgent", "MemoryAgent"
+            ],
+            "total_agents": 9,
+        },
+        "memory_system": {
+            "short_term": "ConversationBufferWindow",
+            "short_term_window": s.SHORT_TERM_WINDOW,
+            "long_term": "Redis",
+            "redis_status": redis_status,
+            "cache_ttl_hours": s.REDIS_CACHE_TTL // 3600,
+        },
+        "services": {
+            "auth": s.AUTH_SERVICE_URL,
+            "past_case_retrieval": s.PAST_CASE_SERVICE_URL,
+            "law_stat_kg": s.LAWSTATKG_SERVICE_URL,
+            "question_gen": s.QUESTIONGEN_SERVICE_URL,
+        },
+        "error_handling": {
+            "max_retries": s.MAX_RETRIES,
+            "retry_delay_seconds": s.RETRY_DELAY,
+            "service_timeout_seconds": s.SERVICE_TIMEOUT,
+        },
+    }

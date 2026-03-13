@@ -1,15 +1,15 @@
 {
   "info": {
-    "name": "JuriAid - Complete API Collection v2.4",
-    "description": "Full API Collection for all 5 JuriAid Backend Microservices. v2.4: Updated response schemas to match actual service outputs.",
+    "name": "JuriAid - Complete API Collection v3.0",
+    "description": "Full API Collection for all 5 JuriAid Backend Microservices.\nv3.0: Added all missing endpoints — Reports API, Metrics, Profile Update, Admin Users, Case File View, Search More, Timeline APIs, Amendments.",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
   "variable": [
-    { "key": "auth_url",         "value": "http://0.0.0.0:8001" },
-    { "key": "pastcase_url",     "value": "http://0.0.0.0:8002" },
-    { "key": "lawstatkg_url",    "value": "http://0.0.0.0:8003" },
-    { "key": "questiongen_url",  "value": "http://0.0.0.0:8004" },
-    { "key": "orchestrator_url", "value": "http://0.0.0.0:8000" },
+    { "key": "auth_url",         "value": "http://127.0.0.1:8001" },
+    { "key": "pastcase_url",     "value": "http://127.0.0.1:8002" },
+    { "key": "lawstatkg_url",    "value": "http://127.0.0.1:8003" },
+    { "key": "questiongen_url",  "value": "http://127.0.0.1:8004" },
+    { "key": "orchestrator_url", "value": "http://127.0.0.1:8000" },
     { "key": "token",            "value": "" }
   ],
   "item": [
@@ -80,11 +80,42 @@
           }
         },
         {
+          "name": "Update My Profile",
+          "request": {
+            "method": "PUT",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"full_name\": \"Kumari Silva Updated\",\n  \"phone\": \"+94779876543\"\n}"
+            },
+            "url": { "raw": "{{auth_url}}/auth/me", "host": ["{{auth_url}}"], "path": ["auth","me"] }
+          }
+        },
+        {
           "name": "Logout",
           "request": {
             "method": "POST",
             "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
             "url": { "raw": "{{auth_url}}/auth/logout", "host": ["{{auth_url}}"], "path": ["auth","logout"] }
+          }
+        },
+        {
+          "name": "Admin - List All Users",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "url": {
+              "raw": "{{auth_url}}/admin/users?skip=0&limit=100",
+              "host": ["{{auth_url}}"],
+              "path": ["admin","users"],
+              "query": [
+                { "key": "skip", "value": "0" },
+                { "key": "limit", "value": "100" }
+              ]
+            }
           }
         }
       ]
@@ -124,6 +155,20 @@
           }
         },
         {
+          "name": "Search More Cases",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                { "key": "file", "type": "file", "src": "", "description": "Upload case PDF for extended search" }
+              ]
+            },
+            "url": { "raw": "{{pastcase_url}}/search-more", "host": ["{{pastcase_url}}"], "path": ["search-more"] }
+          }
+        },
+        {
           "name": "Admin - Upload Case PDF to KG",
           "request": {
             "method": "POST",
@@ -143,6 +188,15 @@
             "method": "GET",
             "header": [],
             "url": { "raw": "{{pastcase_url}}/case/550e8400-e29b-41d4-a716-446655440000", "host": ["{{pastcase_url}}"], "path": ["case","550e8400-e29b-41d4-a716-446655440000"] }
+          }
+        },
+        {
+          "name": "View Full Case PDF File",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": { "raw": "{{pastcase_url}}/case-file/550e8400-e29b-41d4-a716-446655440000", "host": ["{{pastcase_url}}"], "path": ["case-file","550e8400-e29b-41d4-a716-446655440000"] },
+            "description": "Returns the original PDF file as a streaming response (application/pdf)."
           }
         }
       ]
@@ -199,7 +253,44 @@
           "request": {
             "method": "GET",
             "header": [],
-            "url": { "raw": "{{lawstatkg_url}}/statute/MCO_1907?date=today", "host": ["{{lawstatkg_url}}"], "path": ["statute","MCO_1907"], "query": [{ "key": "date", "value": "today" }] }
+            "url": {
+              "raw": "{{lawstatkg_url}}/statute/MCO_1907?date=today",
+              "host": ["{{lawstatkg_url}}"],
+              "path": ["statute","MCO_1907"],
+              "query": [{ "key": "date", "value": "today" }]
+            }
+          }
+        },
+        {
+          "name": "Get Section Timeline",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": { "raw": "{{lawstatkg_url}}/timeline/MCO_1907/602", "host": ["{{lawstatkg_url}}"], "path": ["timeline","MCO_1907","602"] },
+            "description": "Get amendment timeline for a specific section of an act."
+          }
+        },
+        {
+          "name": "Get Timeline Change Detail",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": { "raw": "{{lawstatkg_url}}/timeline/change/sample_after_version_id", "host": ["{{lawstatkg_url}}"], "path": ["timeline","change","sample_after_version_id"] },
+            "description": "Get details of a specific amendment change by version ID."
+          }
+        },
+        {
+          "name": "Get Amendments by Date",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{lawstatkg_url}}/amendments?date=today",
+              "host": ["{{lawstatkg_url}}"],
+              "path": ["amendments"],
+              "query": [{ "key": "date", "value": "today" }]
+            },
+            "description": "Get all amendments effective as of a given date."
           }
         }
       ]
@@ -255,12 +346,12 @@
               ]
             },
             "url": { "raw": "{{orchestrator_url}}/api/analyze", "host": ["{{orchestrator_url}}"], "path": ["api","analyze"] },
-            "description": "Full multi-agent analysis pipeline via LangChain + Gemini orchestration."
+            "description": "Full 9-agent pipeline: Validation → Intent → Memory → [CaseRetrieval ∥ LawRetrieval] → Summary → QuestionGen → Synthesis → Memory Save"
           },
           "response": [
             {
               "name": "Success 200", "status": "OK", "code": 200,
-              "body": "{\n  \"analysis_id\": \"...\",\n  \"status\": \"completed\",\n  \"case_summary\": \"## Case Overview\\n...\",\n  \"similar_cases\": [\n    {\n      \"case_id\": \"\",\n      \"case_name\": \"D/9430 - Versus\",\n      \"score\": 0.95,\n      \"reason\": \"Very similar factual background. Similar legal reasoning.\",\n      \"judgment_preview\": \"In the District Court of Matara...\",\n      \"shared_issues\": [],\n      \"breakdown\": { \"facts\": 1.0, \"issues\": 0.99, \"arguments\": 0.99, \"decisions\": 0.99 },\n      \"view_case_details\": \"/case/abc123\",\n      \"view_full_case_file\": \"/case-file/abc123\"\n    }\n  ],\n  \"relevant_laws\": [\n    {\n      \"case_id\": \"civil_procedure_code_matrimonial_actions_s602_7f6275b4b939\",\n      \"case_name\": \"Muthuranee Vs. Thuraisingham\",\n      \"citation\": \"1984 (1) S.L.R. 381\",\n      \"topic\": \"Separation - Seven Years Period\",\n      \"section_number\": \"602\",\n      \"section_title\": \"Decree for Dissolution of Marriage\",\n      \"principle\": [\"The amendment introducing section 608(2)(b)...\"],\n      \"held\": [],\n      \"facts\": \"\",\n      \"referenced_laws\": [],\n      \"relevant_sections\": [\"608(2)(b)\"],\n      \"court\": \"\",\n      \"amending_law\": \"\",\n      \"confidence_score\": 1.185,\n      \"support_score\": 0.479,\n      \"query_hits\": 2,\n      \"detail_url\": \"/case-law/civil_procedure_code_matrimonial_actions_s602_7f6275b4b939\"\n    }\n  ],\n  \"generated_questions\": [\n    { \"question_id\": 1, \"question\": \"Did the respondent commit adultery as defined by Section 19?\" }\n  ],\n  \"metadata\": {\n    \"filename\": \"case.pdf\",\n    \"file_size_mb\": 0.5,\n    \"text_length\": 3000,\n    \"user_id\": 1,\n    \"user_prompt\": \"Analyze this case\",\n    \"saved_for_reference\": false\n  },\n  \"processing_time_seconds\": 15.2\n}"
+              "body": "{\n  \"analysis_id\": \"uuid-here\",\n  \"status\": \"completed\",\n  \"case_summary\": \"## Case Overview\\n...\",\n  \"similar_cases\": [\n    {\n      \"case_id\": \"\",\n      \"case_name\": \"D/9430 - Versus\",\n      \"score\": 0.95,\n      \"reason\": \"Very similar factual background.\",\n      \"judgment_preview\": \"In the District Court of Matara...\",\n      \"shared_issues\": [],\n      \"breakdown\": { \"facts\": 1.0, \"issues\": 0.99, \"arguments\": 0.99, \"decisions\": 0.99 },\n      \"view_case_details\": \"/case/abc123\",\n      \"view_full_case_file\": \"/case-file/abc123\"\n    }\n  ],\n  \"relevant_laws\": [\n    {\n      \"case_id\": \"civil_procedure_code_matrimonial_actions_s602_7f6275b4b939\",\n      \"case_name\": \"Muthuranee Vs. Thuraisingham\",\n      \"citation\": \"1984 (1) S.L.R. 381\",\n      \"topic\": \"Separation - Seven Years Period\",\n      \"section_number\": \"602\",\n      \"section_title\": \"Decree for Dissolution of Marriage\",\n      \"principle\": [\"The amendment introducing section 608(2)(b)...\"],\n      \"held\": [],\n      \"facts\": \"\",\n      \"referenced_laws\": [],\n      \"relevant_sections\": [\"608(2)(b)\"],\n      \"court\": \"\",\n      \"amending_law\": \"\",\n      \"confidence_score\": 1.185,\n      \"support_score\": 0.479,\n      \"query_hits\": 2,\n      \"detail_url\": \"/case-law/civil_procedure_code_matrimonial_actions_s602_7f6275b4b939\"\n    }\n  ],\n  \"generated_questions\": \"1. Did the respondent commit adultery?\\n2. Was there malicious desertion?\",\n  \"metadata\": {\n    \"filename\": \"case.pdf\",\n    \"file_size_mb\": 0.5,\n    \"text_length\": 3000,\n    \"user_id\": 1,\n    \"user_prompt\": \"Analyze this case\",\n    \"saved_for_reference\": false\n  },\n  \"created_at\": \"2026-03-10T12:00:00.000Z\",\n  \"processing_time_seconds\": 104.68,\n  \"pipeline_metrics\": null\n}"
             },
             {
               "name": "Invalid Case Type 422", "status": "Unprocessable Entity", "code": 422,
@@ -303,6 +394,50 @@
               ]
             },
             "url": { "raw": "{{orchestrator_url}}/api/cases/save", "host": ["{{orchestrator_url}}"], "path": ["api","cases","save"] }
+          }
+        },
+        {
+          "name": "Save Report",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"analysis_id\": \"paste-analysis-id-here\",\n  \"status\": \"completed\",\n  \"case_summary\": \"## Case Overview ...\",\n  \"similar_cases\": [],\n  \"relevant_laws\": [],\n  \"generated_questions\": \"\",\n  \"metadata\": {\n    \"filename\": \"case.pdf\",\n    \"file_size_mb\": 0.5,\n    \"text_length\": 3000,\n    \"user_id\": \"1\",\n    \"user_prompt\": \"Analyze this case\",\n    \"saved_for_reference\": false\n  },\n  \"processing_time_seconds\": 100.0\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": { "raw": "{{orchestrator_url}}/api/reports/save", "host": ["{{orchestrator_url}}"], "path": ["api","reports","save"] },
+            "description": "Save a full analysis report to Redis for the authenticated user. Send the complete AnalysisResponse JSON body."
+          }
+        },
+        {
+          "name": "Get All Saved Reports",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "url": { "raw": "{{orchestrator_url}}/api/reports", "host": ["{{orchestrator_url}}"], "path": ["api","reports"] },
+            "description": "Returns all saved reports for the authenticated user, newest first."
+          }
+        },
+        {
+          "name": "Delete Saved Report",
+          "request": {
+            "method": "DELETE",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "url": { "raw": "{{orchestrator_url}}/api/reports/paste-analysis-id-here", "host": ["{{orchestrator_url}}"], "path": ["api","reports","paste-analysis-id-here"] },
+            "description": "Delete a specific saved report by its analysis_id."
+          }
+        },
+        {
+          "name": "Get System Metrics",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "url": { "raw": "{{orchestrator_url}}/api/metrics", "host": ["{{orchestrator_url}}"], "path": ["api","metrics"] },
+            "description": "Returns architecture info, agent list, memory status, service URLs, and error handling config."
           }
         },
         {
@@ -380,6 +515,35 @@
               ]
             },
             "url": { "raw": "{{orchestrator_url}}/api/analyze", "host": ["{{orchestrator_url}}"], "path": ["api","analyze"] }
+          }
+        },
+        {
+          "name": "Step 6 - Save Report",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": { "mode": "raw", "raw": "{ }" },
+            "url": { "raw": "{{orchestrator_url}}/api/reports/save", "host": ["{{orchestrator_url}}"], "path": ["api","reports","save"] },
+            "description": "Paste the full /api/analyze response JSON as the body to save it."
+          }
+        },
+        {
+          "name": "Step 7 - View Saved Reports",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "url": { "raw": "{{orchestrator_url}}/api/reports", "host": ["{{orchestrator_url}}"], "path": ["api","reports"] }
+          }
+        },
+        {
+          "name": "Step 8 - System Metrics",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "url": { "raw": "{{orchestrator_url}}/api/metrics", "host": ["{{orchestrator_url}}"], "path": ["api","metrics"] }
           }
         }
       ]
