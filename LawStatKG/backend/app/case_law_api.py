@@ -8,7 +8,7 @@ router = APIRouter()
 @router.post("/case-law/retrieve")
 async def retrieve_case_law(
     file: UploadFile = File(...),
-    top_k: int = Query(5, ge=1, le=20)
+    top_k: int = Query(3, ge=1, le=20)
 ):
     if file.content_type != "application/pdf":
         raise HTTPException(status_code=400, detail="Upload a PDF file")

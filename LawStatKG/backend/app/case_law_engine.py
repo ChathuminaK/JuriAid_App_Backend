@@ -67,10 +67,13 @@ class CaseLawSearchEngine:
     def get_case_by_id(self, case_id: str) -> Optional[Dict[str, Any]]:
         return self.doc_map.get(case_id)
 
+    def _doc_topic(self, doc: Dict[str, Any]) -> str:
+        return (doc.get("topic") or "").strip().lower()
+
     def search(
         self,
         query: str,
-        top_k: int = 5,
+        top_k: int = 3,
         bm25_candidates: int = 80,
         alpha: float = 0.55,
         beta: float = 0.45,
@@ -87,7 +90,12 @@ class CaseLawSearchEngine:
             return []
 
         q_set = set(q_tokens)
-        required_hits = max(1, int(np.ceil(min_match_ratio * len(q_tokens))))
+
+        # less brittle requirement for longer legal queries
+        if len(q_tokens) <= 4:
+            required_hits = 1
+        else:
+            required_hits = max(1, int(np.ceil(min_match_ratio * min(len(q_tokens), 8))))
 
         bm25_scores = self.bm25.get_scores(q_tokens)
 
@@ -96,9 +104,11 @@ class CaseLawSearchEngine:
             b = float(bm25_scores[i])
             if b <= 0.0:
                 continue
+
             overlap = len(q_set.intersection(self.token_sets[i]))
             if overlap < required_hits:
                 continue
+
             candidates.append(i)
 
         if not candidates:
@@ -122,6 +132,7 @@ class CaseLawSearchEngine:
         for j, i in enumerate(candidates):
             if cosine[j] < min_semantic_cosine:
                 continue
+
             out.append({
                 "doc": self.docs[i],
                 "bm25": float(bm25_arr[j]),
@@ -129,5 +140,5 @@ class CaseLawSearchEngine:
                 "score": float(final[j]),
             })
 
-        out.sort(key=lambda x: x["score"], reverse=True)
+        out.sort(key=lambda x: (x["score"], x["semantic_cosine"], x["bm25"]), reverse=True)
         return out[:top_k]
