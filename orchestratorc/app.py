@@ -106,14 +106,6 @@ async def analyze_case(
     ),
     user: dict = Depends(verify_token),
 ):
-    """
-    POST /api/analyze — Main multi-agent analysis pipeline.
-
-    Agent Flow:
-      ValidationAgent → OrchestratorAgent → IntentDetectionAgent → MemoryAgent →
-      [CaseRetrievalAgent || LawRetrievalAgent] → SummaryAgent →
-      QuestionGenAgent → SynthesisAgent → MemoryAgent
-    """
     user_id = user.get("sub", 0)
     logger.info(f"[OrchestratorAgent] Received analysis request | user={user_id} | file={file.filename}")
 
@@ -122,17 +114,23 @@ async def analyze_case(
         pdf_bytes = await _validate_pdf(file)
         logger.info(f"[OrchestratorAgent] PDF validated ({len(pdf_bytes) / 1024:.1f} KB)")
 
-        # Step 2: Extract text
+        # Step 2: Check Redis cache
+        from orchestrator.redis_cache import hash_file, get_cached, save_to_cache
+        file_hash = hash_file(pdf_bytes)
+        cached = get_cached(user_id, file_hash)
+        if cached:
+            logger.info(f"[OrchestratorAgent] Returning cached result for user={user_id}")
+            return AnalysisResponse(**cached)
+
+        # Step 3: Extract text
         logger.info(f"[OrchestratorAgent] Extracting text from PDF")
         case_text = extract_text_from_pdf(pdf_bytes)
 
-        # Step 3: ValidationAgent — Ensure it's a Sri Lankan divorce case
+        # Step 4: ValidationAgent
         logger.info(f"[ValidationAgent] Validating case type (Sri Lankan divorce only)")
         is_valid, validation_details = validate_divorce_case(case_text)
         if not is_valid:
-            logger.warning(
-                f"[ValidationAgent] ✗ Rejected: {validation_details.get('reason')}"
-            )
+            logger.warning(f"[ValidationAgent] ✗ Rejected: {validation_details.get('reason')}")
             raise HTTPException(
                 status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
                 detail={
@@ -147,7 +145,7 @@ async def analyze_case(
             f"{validation_details.get('strong_matches', 0)} strong indicators)"
         )
 
-        # Step 4: Run multi-agent pipeline
+        # Step 5: Run multi-agent pipeline
         result = await run_analysis_pipeline(
             pdf_bytes=pdf_bytes,
             filename=file.filename or "upload.pdf",
@@ -155,6 +153,9 @@ async def analyze_case(
             user_id=user_id,
             pre_extracted_text=case_text,
         )
+
+        # Step 6: Save to Redis cache
+        save_to_cache(user_id, file_hash, result.model_dump())
 
         return result
 
@@ -228,3 +229,93 @@ async def clear_session_history(session_id: str, user: dict = Depends(verify_tok
     logger.info(f"[MemoryAgent] Clear history for session {session_id[:8]}...")
     clear_conversation(session_id)
     return {"session_id": session_id, "cleared": True}
+
+
+# ---------- Saved Reports Endpoints ----------
+
+@app.post("/api/reports/save")
+async def save_report_endpoint(
+    report: AnalysisResponse,
+    user: dict = Depends(verify_token),
+):
+    """Save an analysis report for the authenticated user."""
+    user_id = user.get("sub", 0)
+    from orchestrator.redis_cache import save_report
+    ok = save_report(user_id, report.model_dump())
+    if not ok:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Redis unavailable — report could not be saved",
+        )
+    logger.info(f"[OrchestratorAgent] Report saved | user={user_id} | id={report.analysis_id[:8]}")
+    return {"saved": True, "analysis_id": report.analysis_id}
+
+
+@app.get("/api/reports")
+async def get_reports_endpoint(user: dict = Depends(verify_token)):
+    """Get all saved reports for the authenticated user."""
+    user_id = user.get("sub", 0)
+    from orchestrator.redis_cache import get_saved_reports
+    reports = get_saved_reports(user_id)
+    return {"reports": reports, "count": len(reports)}
+
+
+@app.delete("/api/reports/{analysis_id}")
+async def delete_report_endpoint(
+    analysis_id: str,
+    user: dict = Depends(verify_token),
+):
+    """Delete a saved report by analysis_id for the authenticated user."""
+    user_id = user.get("sub", 0)
+    from orchestrator.redis_cache import delete_saved_report
+    ok = delete_saved_report(user_id, analysis_id)
+    return {"deleted": ok, "analysis_id": analysis_id}
+
+
+@app.get("/api/metrics")
+async def get_metrics(user: dict = Depends(verify_token)):
+    """Return system metrics for evaluation dashboard."""
+    from orchestrator.redis_cache import _get_client
+    from config import get_settings
+    s = get_settings()
+    
+    redis_status = "disabled"
+    if s.REDIS_ENABLED:
+        try:
+            _get_client().ping()
+            redis_status = "connected"
+        except Exception:
+            redis_status = "error"
+    
+    return {
+        "service": "JuriAid Orchestrator",
+        "version": "2.3.0",
+        "architecture": {
+            "framework": "LangChain",
+            "llm": "Gemini 2.5 Flash",
+            "agents": [
+                "OrchestratorAgent", "IntentDetectionAgent", "ValidationAgent",
+                "CaseRetrievalAgent", "LawRetrievalAgent", "SummaryAgent",
+                "QuestionGenAgent", "SynthesisAgent", "MemoryAgent"
+            ],
+            "total_agents": 9,
+        },
+        "memory_system": {
+            "short_term": "ConversationBufferWindow",
+            "short_term_window": s.SHORT_TERM_WINDOW,
+            "long_term": "Redis",
+            "redis_status": redis_status,
+            "cache_ttl_hours": s.REDIS_CACHE_TTL // 3600,
+        },
+        "services": {
+            "auth": s.AUTH_SERVICE_URL,
+            "past_case_retrieval": s.PAST_CASE_SERVICE_URL,
+            "law_stat_kg": s.LAWSTATKG_SERVICE_URL,
+            "question_gen": s.QUESTIONGEN_SERVICE_URL,
+        },
+        "error_handling": {
+            "max_retries": s.MAX_RETRIES,
+            "retry_delay_seconds": s.RETRY_DELAY,
+            "service_timeout_seconds": s.SERVICE_TIMEOUT,
+        },
+    }

@@ -148,16 +148,14 @@ def _format_output(findings: list[str], admissions: list[str]) -> str:
     """Format findings and admissions into a clean court-ready output."""
     lines = []
 
-    lines.append("=" * 60)
-    lines.append("FINDINGS OF FACT")
-    lines.append("=" * 60)
+    lines.append("**FINDINGS OF FACT**")
+    lines.append("")
     for i, f in enumerate(findings, 1):
         lines.append(f"{i}. {f}")
 
     lines.append("")
-    lines.append("=" * 60)
-    lines.append("ADMISSIONS")
-    lines.append("=" * 60)
+    lines.append("**ADMISSIONS**")
+    lines.append("")
     for i, a in enumerate(admissions, 1):
         lines.append(f"{i}. {a}")
 

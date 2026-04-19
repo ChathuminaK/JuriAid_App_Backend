@@ -1,6 +1,23 @@
+import re
 from agents.reasoning_agent import generate_questions as reasoning_agent
 from agents.question_agent import question_agent
 from agents.validation_agent import validation_agent
+
+
+def fix_findings(text):
+    lines = text.split('\n')
+    fixed = []
+    for line in lines:
+        match = re.match(r'^(FINDING\s*\d+[:.]\s*)(.+)', line, re.IGNORECASE)
+        if match:
+            prefix = match.group(1)
+            content = match.group(2).strip()
+            if not content.lower().startswith(("whether","did","was","is","has","can")):
+                content = "Whether " + content
+            fixed.append(prefix + content)
+        else:
+            fixed.append(line)
+    return '\n'.join(fixed)
 
 
 def run_question_generation(case_text: str, law_text: str, past_cases: str) -> str:
@@ -31,6 +48,11 @@ def run_question_generation(case_text: str, law_text: str, past_cases: str) -> s
 
     # Safely extract string from validation_agent (returns dict or str)
     if isinstance(validation_result, dict):
-        return validation_result.get("validated", formatted)
+        final = validation_result.get("validated", formatted)
     else:
-        return str(validation_result)
+        final = str(validation_result)
+
+    # Step 4 - Enforce question format on findings
+    final = fix_findings(final)
+
+    return final
