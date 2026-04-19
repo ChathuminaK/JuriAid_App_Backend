@@ -7,4 +7,7 @@ def pdf_to_text(pdf_bytes: bytes) -> str:
     for page in doc:
         parts.append(page.get_text("text"))
     doc.close()
-    return "\n".join(parts)
+    text = "\n".join(parts)
+
+    words = text.split()
+    return " ".join(words[:2000])

@@ -212,7 +212,7 @@ async def run_analysis_pipeline(
     pdf_bytes: bytes,
     filename: str,
     user_prompt: str,
-    user_id: int,
+    user_id: str,
     session_id: Optional[str] = None,
     pre_extracted_text: Optional[str] = None,
 ) -> AnalysisResponse:
