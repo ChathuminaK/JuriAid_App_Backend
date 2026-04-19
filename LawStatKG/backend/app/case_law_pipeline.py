@@ -74,19 +74,6 @@ def extract_sections(text: str, limit: int = 10) -> List[str]:
     return [s for s, _ in freq.most_common(limit)]
 
 
-def detect_topics(text: str) -> List[str]:
-    text = text.lower()
-    detected = []
-
-    for topic, keys in TOPIC_KEYWORDS.items():
-        for key in keys:
-            if key in text:
-                detected.append(topic)
-                break
-
-    return detected
-
-
 def build_queries(case_text: str) -> List[str]:
     t = clean_query(case_text)
     clean_t = _strip_noise(t)          # strip procedural noise before keyword extraction
@@ -95,21 +82,14 @@ def build_queries(case_text: str) -> List[str]:
     detected_topics = detect_topics(t)
 
     queries = []
-
     if keywords:
         queries.append(" ".join(keywords[:10]))
         queries.append(" ".join(keywords[:6]))
 
-    for s in sections[:6]:
+    for s in sections[:8]:
         queries.append(f"section {s}")
         if keywords:
             queries.append(f"section {s} " + " ".join(keywords[:6]))
-
-    # CHANGE:
-    # add topic names as strong queries
-    for topic in detected_topics:
-        topic_phrase = topic.replace("_", " ")
-        queries.append(topic_phrase)
 
     seen = set()
     out = []
@@ -118,10 +98,7 @@ def build_queries(case_text: str) -> List[str]:
         if q and q not in seen:
             seen.add(q)
             out.append(q)
-
-    # CHANGE:
-    # fewer queries -> less noise
-    return out[:8]
+    return out[:20]
 
 
 def support_score(case_text: str, doc: Dict[str, Any]) -> float:
@@ -145,7 +122,6 @@ def support_score(case_text: str, doc: Dict[str, Any]) -> float:
 def retrieve_case_law_from_case(engine, case_text: str, top_k: int = 5) -> Dict[str, Any]:
     case_text = normalize_text(case_text)
     queries = build_queries(case_text)
-    detected_topics = detect_topics(case_text)
 
     all_hits = []
     for q in queries:
@@ -153,10 +129,10 @@ def retrieve_case_law_from_case(engine, case_text: str, top_k: int = 5) -> Dict[
             query=q,
             top_k=15,
             bm25_candidates=120,
-            alpha=0.55,              # CHANGE: align with stricter search
-            beta=0.45,
-            min_match_ratio=0.50,
-            min_semantic_cosine=0.35
+            alpha=0.65,
+            beta=0.35,
+            min_match_ratio=0.25,
+            min_semantic_cosine=0.08
         )
         all_hits.append(res)
 
@@ -176,28 +152,12 @@ def retrieve_case_law_from_case(engine, case_text: str, top_k: int = 5) -> Dict[
         best = v["best"]
         if not best:
             continue
-
-        # CHANGE:
-        # topic filtering to remove unrelated laws
-        if detected_topics:
-            doc_topic = (best["doc"].get("topic") or "").strip().lower()
-            if doc_topic not in [t.lower() for t in detected_topics]:
-                continue
-
         sup = support_score(case_text, best["doc"])
-
-        # CHANGE:
-        # stronger support-score weight
-        final = max(v["scores"]) + 0.10 * (v["hits"] - 1) + 0.45 * sup
-
+        final = max(v["scores"]) + 0.10 * (v["hits"] - 1) + 0.25 * sup
         best["final_score"] = float(final)
         best["support_score"] = float(sup)
         best["query_hits"] = int(v["hits"])
         merged.append(best)
-
-    # CHANGE:
-    # remove weak matches
-    merged = [m for m in merged if m["final_score"] > 0.45]
 
     merged.sort(key=lambda x: x["final_score"], reverse=True)
 
@@ -226,7 +186,6 @@ def retrieve_case_law_from_case(engine, case_text: str, top_k: int = 5) -> Dict[
 
     return {
         "queries_generated": queries,
-        "detected_topics": detected_topics,   # CHANGE: useful for debugging and evaluation
         "results_count": len(out),
         "relevant_case_laws": out
     }
