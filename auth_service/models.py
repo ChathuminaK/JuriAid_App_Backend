@@ -29,6 +29,7 @@ class User(Base):
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
     last_login = Column(DateTime, nullable=True)
     is_active = Column(Boolean, default=True, nullable=False)
+    profile_icon_url = Column(String(500), nullable=True, default=None)
 
     def __repr__(self):
         return f"<User {self.email} ({self.role})>"

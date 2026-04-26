@@ -1,0 +1,144 @@
+{
+  "amendments": [
+    {
+      "amend_id": "am_1954_07_08_5514",
+      "date": "1954-07-08",
+      "am_title": "Kandyan Marriage and Divorce (Amendment) Act, No. 34 of 1954",
+      "summary": "Set appointed date (1954-08-01) for commencement of Kandyan Marriage and Divorce Act.",
+      "section_no": "2",
+      "section_title": "Application of Act",
+      "act_id": "kandyan_marriages_cap132",
+      "jurisdiction": "Kandyan"
+    },
+    {
+      "amend_id": "am_1954_07_08_5511",
+      "date": "1954-07-08",
+      "am_title": "Muslim Marriage and Divorce (Amendment) Act, No. 31 of 1954",
+      "summary": "Set appointed date (1954-08-01) for commencement of Muslim Marriage and Divorce Act; established registration framework.",
+      "section_no": "2",
+      "section_title": "Application of Act",
+      "act_id": "muslim_marriages_cap134",
+      "jurisdiction": "Muslim"
+    },
+    {
+      "amend_id": "am_1965_07_07_5583",
+      "date": "1965-07-07",
+      "am_title": "Muslim Marriage and Divorce (Amendment) Act, No. 1 of 1965",
+      "summary": "Transferred appointment powers for Quazis and Registrars from Minister to Judicial Service Commission; added maintenance for illegitimate children under Muslim law.",
+      "section_no": "12",
+      "section_title": "Quazis",
+      "act_id": "muslim_marriages_cap134",
+      "jurisdiction": "Muslim"
+    },
+    {
+      "amend_id": "am_1965_08_16_5261",
+      "date": "1965-08-16",
+      "am_title": "Muslim Marriage and Divorce (Amendment) Act, No. 5 of 1965",
+      "summary": "Added procedure for replacement of lost counterfoil/duplicate registration entries.",
+      "section_no": "18",
+      "section_title": "Declaration and form of registration",
+      "act_id": "muslim_marriages_cap134",
+      "jurisdiction": "Muslim"
+    },
+    {
+      "amend_id": "am_1969_12_09_5688",
+      "date": "1969-12-09",
+      "am_title": "Muslim Marriage and Divorce (Amendment) Act, No. 32 of 1969",
+      "summary": "Enhanced powers of Judicial Service Commission over Quazis; allowed transfer of proceedings between Quazis.",
+      "section_no": "15",
+      "section_title": "Board of Quazis",
+      "act_id": "muslim_marriages_cap134",
+      "jurisdiction": "Muslim"
+    },
+    {
+      "amend_id": "am_1975_01_01_law41",
+      "date": "1975-01-01",
+      "am_title": "Law No. 41 of 1975",
+      "summary": "General Marriages: Introduced free copy to female party (s35A); changed fee payment from stamp to receipt; amended solemnization, registration, and certificate procedures.",
+      "section_no": "35A",
+      "section_title": "Copy of registration entry to be issued free",
+      "act_id": "general_marriages_cap131",
+      "jurisdiction": "General"
+    },
+    {
+      "amend_id": "am_1978_01_01_law23",
+      "date": "1978-01-01",
+      "am_title": "Law No. 23 of 1978",
+      "summary": "General Marriages: Clarified roles of Registrar-General and Deputy; updated definitions in s64.",
+      "section_no": "64",
+      "section_title": "Interpretation",
+      "act_id": "general_marriages_cap131",
+      "jurisdiction": "General"
+    },
+    {
+      "amend_id": "am_1995_10_19_3129",
+      "date": "1995-10-19",
+      "am_title": "Kandyan Marriage and Divorce (Amendment) Act, No. 19 of 1995",
+      "summary": "Raised lawful age of marriage to 18 years for both sexes in Kandyan marriages (amended s4 and s66).",
+      "section_no": "4",
+      "section_title": "Lawful age of marriage",
+      "act_id": "kandyan_marriages_cap132",
+      "jurisdiction": "Kandyan"
+    },
+    {
+      "amend_id": "am_2006_11_06_5738",
+      "date": "2006-11-06",
+      "am_title": "Kandyan Marriage and Divorce (Amendment) Act, No. 39 of 2006",
+      "summary": "Added disqualification criteria for Kandyan Registrars (MPs, PC members, local authority members, paid state officers).",
+      "section_no": "41",
+      "section_title": "Appointment of Registrars of Kandyan Marriages",
+      "act_id": "kandyan_marriages_cap132",
+      "jurisdiction": "Kandyan"
+    },
+    {
+      "amend_id": "am_2006_11_06_5739",
+      "date": "2006-11-06",
+      "am_title": "Muslim Marriage and Divorce (Amendment) Act, No. 40 of 2006",
+      "summary": "Added disqualification criteria for Muslim Marriage Registrars (MPs, PC members, local authority members, paid state officers).",
+      "section_no": "8",
+      "section_title": "Registrars of Muslim Marriages",
+      "act_id": "muslim_marriages_cap134",
+      "jurisdiction": "Muslim"
+    },
+    {
+      "amend_id": "am_2013_01_01_5922",
+      "date": "2013-01-01",
+      "am_title": "Kandyan Marriage and Divorce (Amendment) Act, No. 23 of 2013",
+      "summary": "Replaced stamp-based fee with receipt-based payment for Kandyan marriage registration (s18, s19).",
+      "section_no": "18",
+      "section_title": "Issue of certificates in respect of Kandyan marriages",
+      "act_id": "kandyan_marriages_cap132",
+      "jurisdiction": "Kandyan"
+    },
+    {
+      "amend_id": "am_2013_01_01_5904",
+      "date": "2013-01-01",
+      "am_title": "Muslim Marriage and Divorce (Amendment) Act, No. 24 of 2013",
+      "summary": "Bridegroom to pay registration fee via receipt (not stamp); retroactive validation of past registrations.",
+      "section_no": "18",
+      "section_title": "Declaration and form of registration",
+      "act_id": "muslim_marriages_cap134",
+      "jurisdiction": "Muslim"
+    },
+    {
+      "amend_id": "am_2022_11_17_6279",
+      "date": "2022-11-17",
+      "am_title": "Kandyan Marriage and Divorce (Amendment) Act, No. 37 of 2022",
+      "summary": "Repealed entire Part II (Sections 8–15) — abolished parental/minor consent regime; simplified objection process to 'interested persons' only; removed 'consent' from proof exemption (s29).",
+      "section_no": "8",
+      "section_title": "Consent required to marriage of minor",
+      "act_id": "kandyan_marriages_cap132",
+      "jurisdiction": "Kandyan"
+    },
+    {
+      "amend_id": "am_1947_01_01_ord58",
+      "date": "1947-01-01",
+      "am_title": "Ordinance No. 58 of 1947",
+      "summary": "Jaffna Tesawalamai: Amended property rights of married women; defined 'thediatheddam' and its devolution; clarified separate estate rules.",
+      "section_no": "6",
+      "section_title": "Property of a wife acquired during or before marriage to remain her separate property",
+      "act_id": "jaffna_tesawalamai_cap58",
+      "jurisdiction": "Jaffna"
+    }
+  ]
+}

@@ -1,33 +1,42 @@
 import httpx
-from fastapi import HTTPException, Header
-from typing import Optional
-import os
-from dotenv import load_dotenv
+import logging
+from fastapi import HTTPException, status, Depends
+from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
+from config import get_settings
 
-load_dotenv()
+logger = logging.getLogger(__name__)
+security = HTTPBearer()
+settings = get_settings()
 
-AUTH_SERVICE_URL = os.getenv("AUTH_SERVICE_URL", "http://127.0.0.1:8001")
 
-async def verify_user_token(authorization: Optional[str] = Header(None)):
-    """Middleware to verify JWT token via auth_service"""
-    if not authorization:
-        raise HTTPException(status_code=401, detail="Missing Authorization header")
-    
-    if not authorization.startswith("Bearer "):
-        raise HTTPException(status_code=401, detail="Invalid Authorization format")
-    
-    token = authorization.replace("Bearer ", "")
-    
+async def verify_token(
+    credentials: HTTPAuthorizationCredentials = Depends(security),
+) -> dict:
+    """Verify JWT token via Auth Service /auth/verify."""
+
+    if not settings.AUTH_ENABLED:
+        logger.warning("⚠️ Auth disabled - dev mode")
+        return {"sub": 0, "email": "dev@juriaid.lk", "role": "user"}
+
+    token = credentials.credentials
+
     try:
-        async with httpx.AsyncClient() as client:
-            response = await client.get(
-                f"{AUTH_SERVICE_URL}/auth/verify",
-                headers={"Authorization": f"Bearer {token}"}
+        async with httpx.AsyncClient(timeout=10) as client:
+            resp = await client.get(
+                f"{settings.AUTH_SERVICE_URL}/auth/verify",
+                headers={"Authorization": f"Bearer {token}"},
             )
-            
-            if response.status_code == 200:
-                return response.json()
-            else:
-                raise HTTPException(status_code=401, detail="Invalid or expired token")
-    except httpx.RequestError:
-        raise HTTPException(status_code=503, detail="Auth service unavailable")
+
+        if resp.status_code == 200:
+            data = resp.json()
+            return {
+                "sub": data.get("user_id"),
+                "email": data.get("email"),
+                "role": data.get("role"),
+            }
+
+        raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Invalid or expired token")
+
+    except httpx.RequestError as e:
+        logger.error(f"Auth service unreachable: {e}")
+        raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE, "Auth service unavailable")

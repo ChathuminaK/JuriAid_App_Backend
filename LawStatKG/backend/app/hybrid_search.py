@@ -1,33 +1,25 @@
 import os
 import re
+import json
+import pickle
+from pathlib import Path
 from datetime import date
-from typing import List, Dict, Optional, Tuple, DefaultDict
+from typing import List, Dict, Optional, DefaultDict
 from collections import defaultdict
+import hashlib
 
 import numpy as np
-from neo4j import GraphDatabase
-from dotenv import load_dotenv
 from rank_bm25 import BM25Okapi
 from sentence_transformers import SentenceTransformer
 
+from app.kg_client import KGClient
 
-# ENV + NEO4J CONNECTION
-
-load_dotenv()
-
-NEO4J_URI = os.getenv("NEO4J_URI", "bolt://localhost:7687")
-NEO4J_USER = os.getenv("NEO4J_USER", "neo4j")
-NEO4J_PASSWORD = os.getenv("NEO4J_PASSWORD", "Samidi123")
-
-
-
-# 1) Cleaning + Tokenizer (STRICT)   fixes /n \n problem
 
 _TOKEN_RE = re.compile(r"[A-Za-z0-9']+")
 
 STOPWORDS = {
-    "a", "an", "and", "are", "as", "at", "be", "by", "for", "from", "has", "have", "in", "is", "it",
-    "of", "on", "or", "that", "the", "their", "they", "this", "to", "was", "were", "with", "you", "your"
+    "a","an","and","are","as","at","be","by","for","from","has","have","in","is","it",
+    "of","on","or","that","the","their","they","this","to","was","were","with","you","your"
 }
 
 def clean_query(q: str) -> str:
@@ -41,21 +33,13 @@ def tokenize(text: str) -> List[str]:
     if not text:
         return []
     toks = _TOKEN_RE.findall(text.lower())
-    # STRICT: remove stopwords + tokens shorter than 3
     toks = [t for t in toks if t not in STOPWORDS and len(t) >= 3]
     return toks
-
-
-
-# Temporal helpers
 
 def today_str() -> str:
     return date.today().isoformat()
 
 def temporal_ok(doc: Dict, as_of: str) -> bool:
-    """
-    doc['valid_from'] and doc['valid_to'] come from Neo4j as ISO strings or None.
-    """
     vf = doc.get("valid_from")
     vt = doc.get("valid_to")
     if vf and vf > as_of:
@@ -65,335 +49,329 @@ def temporal_ok(doc: Dict, as_of: str) -> bool:
     return True
 
 
-
-# Fetch sections directly from Neo4j KG
-
-def load_sections_from_neo4j() -> List[Dict]:
+class HybridSearchEngine:
     """
-    Reads from KG:
-      (a:Act)-[:HAS_SECTION]->(s:Section)-[:HAS_VERSION]->(sv:SectionVersion)
-
-    IMPORTANT:
-    - We return dates as strings using toString(date)
-    - We also include Act metadata needed for act expansion
+    Production-ready engine:
+    - Can BUILD artifacts (offline script or dev mode)
+    - Can LOAD artifacts fast (production)
     """
-    driver = GraphDatabase.driver(NEO4J_URI, auth=(NEO4J_USER, NEO4J_PASSWORD))
+    def __init__(self):
+        self.ready = False
+        self.model = None
 
-    cypher = """
-    MATCH (a:Act)-[:HAS_SECTION]->(s:Section)-[:HAS_VERSION]->(sv:SectionVersion)
-    RETURN
-      sv.version_id            AS version_id,
-      a.act_id                 AS act_id,
-      a.law                    AS law,
-      a.title                  AS act_title,
-      a.jurisdiction           AS jurisdiction,
+        self.sections: List[Dict] = []
+        self.section_texts: List[str] = []
+        self.section_tokens: List[List[str]] = []
+        self.section_token_sets: List[set] = []
 
-      sv.section_no            AS section_no,
-      sv.title                 AS section_title,
-      sv.text                  AS text,
+        self.bm25 = None
+        self.doc_emb = None
 
-      CASE WHEN sv.valid_from IS NULL THEN NULL ELSE toString(sv.valid_from) END AS valid_from,
-      CASE WHEN sv.valid_to   IS NULL THEN NULL ELSE toString(sv.valid_to)   END AS valid_to,
+        self.act_to_sections: DefaultDict[str, List[int]] = defaultdict(list)
+        self.act_meta_tokens: DefaultDict[str, set] = defaultdict(set)
 
-      coalesce(sv.citations, [])      AS citations,
-      coalesce(sv.amended_by, [])     AS amended_by,
-      coalesce(sv.repealed_by, NULL)  AS repealed_by,
-      coalesce(sv.current_status, "active") AS current_status
-    ORDER BY a.act_id, sv.section_no
-    """
+        # artifacts path
+        self.artifact_dir = Path(os.getenv("ARTIFACT_DIR", Path(__file__).resolve().parents[1] / "artifacts"))
+        self.artifact_dir.mkdir(parents=True, exist_ok=True)
 
-    sections: List[Dict] = []
-    with driver.session() as session:
-        for record in session.run(cypher):
-            sections.append({
-                "version_id": record["version_id"],
-                "act_id": record["act_id"],
-                "law": record["law"],
-                "act_title": record["act_title"],
-                "jurisdiction": record["jurisdiction"],
+        # choose model (keep your research choice by default)
+        self.model_name = os.getenv("EMBED_MODEL", "nlpaueb/legal-bert-base-uncased")
 
-                "section_no": record["section_no"],
-                "section_title": record["section_title"],
-                "text": record["text"] or "",
+    # -----------------------------
+    # Neo4j load
+    # -----------------------------
+    def _load_sections_from_neo4j(self, kg: KGClient) -> List[Dict]:
+        cypher = """
+        MATCH (a:Act)-[:HAS_SECTION]->(s:Section)-[:HAS_VERSION]->(sv:SectionVersion)
+        RETURN
+          sv.version_id AS version_id,
+          a.act_id AS act_id,
+          a.law AS law,
+          a.title AS act_title,
+          a.jurisdiction AS jurisdiction,
+          sv.section_no AS section_no,
+          sv.title AS section_title,
+          sv.text AS text,
+          CASE WHEN sv.valid_from IS NULL THEN NULL ELSE toString(sv.valid_from) END AS valid_from,
+          CASE WHEN sv.valid_to IS NULL THEN NULL ELSE toString(sv.valid_to) END AS valid_to,
+          coalesce(sv.citations, []) AS citations,
+          coalesce(sv.amended_by, []) AS amended_by,
+          coalesce(sv.repealed_by, NULL) AS repealed_by,
+          coalesce(sv.current_status, "active") AS current_status
+        ORDER BY a.act_id, sv.section_no
+        """
+        out = []
+        with kg.driver.session() as session:
+            for r in session.run(cypher):
+                out.append({
+                    "version_id": r["version_id"],
+                    "act_id": r["act_id"],
+                    "law": r["law"],
+                    "act_title": r["act_title"],
+                    "jurisdiction": r["jurisdiction"],
+                    "section_no": (r["section_no"] or "").strip(),
+                    "section_title": r["section_title"],
+                    "text": r["text"] or "",
+                    "valid_from": r["valid_from"],
+                    "valid_to": r["valid_to"],
+                    "citations": r["citations"] or [],
+                    "amended_by": r["amended_by"] or [],
+                    "repealed_by": r["repealed_by"],
+                    "current_status": r["current_status"] or "active",
+                })
+        return out
 
-                "valid_from": record["valid_from"],
-                "valid_to": record["valid_to"],
+    def _fingerprint_sections(self, sections: List[Dict]) -> str:
+        """
+        Stable-ish fingerprint so you can detect changes.
+        Uses version_id + valid_from + valid_to + hash(text).
+        """
+        h = hashlib.sha256()
+        for s in sections:
+            h.update((s.get("version_id") or "").encode("utf-8"))
+            h.update((s.get("valid_from") or "").encode("utf-8"))
+            h.update((s.get("valid_to") or "").encode("utf-8"))
+            txt = (s.get("section_title","") + " " + s.get("text","")).encode("utf-8")
+            h.update(hashlib.md5(txt).digest())
+        return h.hexdigest()
 
-                "citations": record["citations"] or [],
-                "amended_by": record["amended_by"] or [],
-                "repealed_by": record["repealed_by"],
-                "current_status": record["current_status"] or "active",
-            })
+    # -----------------------------
+    # Artifact paths
+    # -----------------------------
+    def _p_sections(self): return self.artifact_dir / "sections.json"
+    def _p_bm25(self): return self.artifact_dir / "bm25.pkl"
+    def _p_emb(self): return self.artifact_dir / "embeddings.npy"
+    def _p_meta(self): return self.artifact_dir / "meta.json"
 
-    driver.close()
-    return sections
+    def artifacts_exist(self) -> bool:
+        return self._p_sections().exists() and self._p_bm25().exists() and self._p_emb().exists() and self._p_meta().exists()
 
+    # -----------------------------
+    # Build artifacts (slow)
+    # -----------------------------
+    def build_and_save_artifacts(self):
+        kg = KGClient()
+        if not kg.ping():
+            raise RuntimeError("Neo4j is not reachable (Aura). Check env credentials/network.")
+        sections = self._load_sections_from_neo4j(kg)
+        kg.close()
 
+        if not sections:
+            raise RuntimeError("No sections loaded from Neo4j. Check your graph data.")
 
-# Build indexes from KG data (BM25 + maps + embeddings)
+        section_texts = [(s.get("section_title", "") + " " + s.get("text", "")) for s in sections]
+        section_tokens = [tokenize(t) for t in section_texts]
+        bm25 = BM25Okapi(section_tokens)
 
-print("Loading sections directly from Neo4j Knowledge Graph...")
-ALL_SECTIONS: List[Dict] = load_sections_from_neo4j()
-print(f"Loaded {len(ALL_SECTIONS)} section versions from Neo4j")
+        model = SentenceTransformer(self.model_name)
+        emb = model.encode(
+            section_texts,
+            convert_to_numpy=True,
+            normalize_embeddings=True,
+            show_progress_bar=True
+        )
 
-print("Building BM25 index (sections)...")
-SECTION_TEXTS = [(s.get("section_title", "") + " " + s.get("text", "")) for s in ALL_SECTIONS]
-SECTION_TOKENS = [tokenize(t) for t in SECTION_TEXTS]
-BM25 = BM25Okapi(SECTION_TOKENS)
-SECTION_TOKEN_SETS = [set(t) for t in SECTION_TOKENS]
-print("BM25 index ready")
+        # save sections.json
+        with open(self._p_sections(), "w", encoding="utf-8") as f:
+            json.dump(sections, f, ensure_ascii=False)
 
-# act_id -> section indexes
-ACT_TO_SECTIONS: DefaultDict[str, List[int]] = defaultdict(list)
-for i, s in enumerate(ALL_SECTIONS):
-    ACT_TO_SECTIONS[s.get("act_id")].append(i)
+        # save bm25.pkl (store token lists; rebuild BM25 quickly on load)
+        with open(self._p_bm25(), "wb") as f:
+            pickle.dump({"section_tokens": section_tokens}, f)
 
-# act metadata tokens (used for act expansion)
-ACT_META_TOKENS: DefaultDict[str, set] = defaultdict(set)
-for s in ALL_SECTIONS:
-    act_id = s.get("act_id")
-    meta = f"{s.get('act_id','')} {s.get('law','')} {s.get('act_title','')} {s.get('jurisdiction','')}"
-    ACT_META_TOKENS[act_id].update(tokenize(meta))
+        # save embeddings
+        np.save(self._p_emb(), emb)
 
-print("Loading semantic model (LegalBERT)...")
-MODEL = SentenceTransformer("nlpaueb/legal-bert-base-uncased")
-print("Model loaded")
+        # meta
+        meta = {
+            "model_name": self.model_name,
+            "count": len(sections),
+            "fingerprint": self._fingerprint_sections(sections),
+            "built_on": today_str()
+        }
+        with open(self._p_meta(), "w", encoding="utf-8") as f:
+            json.dump(meta, f, ensure_ascii=False, indent=2)
 
-print("Precomputing section embeddings (from KG text)...")
-DOC_EMB = MODEL.encode(
-    SECTION_TEXTS,
-    convert_to_numpy=True,
-    normalize_embeddings=True,
-    show_progress_bar=True
-)
-print("Embeddings ready")
+    # -----------------------------
+    # Load artifacts (fast)
+    # -----------------------------
+    def load(self, allow_build: bool = False):
+        """
+        Production:
+          allow_build=False and artifacts must exist.
+        Dev:
+          allow_build=True builds if missing.
+        """
+        if not self.artifacts_exist():
+            if not allow_build:
+                raise RuntimeError(
+                    f"Search artifacts missing in {self.artifact_dir}. "
+                    f"Run scripts/build_search_artifacts.py first."
+                )
+            self.build_and_save_artifacts()
 
+        # load sections
+        with open(self._p_sections(), "r", encoding="utf-8") as f:
+            self.sections = json.load(f)
 
+        self.section_texts = [(s.get("section_title", "") + " " + s.get("text", "")) for s in self.sections]
 
-# HYBRID STRICT SEARCH (BM25 gate + LegalBERT rerank)
+        # tokens
+        with open(self._p_bm25(), "rb") as f:
+            payload = pickle.load(f)
+        self.section_tokens = payload["section_tokens"]
+        self.section_token_sets = [set(t) for t in self.section_tokens]
+        self.bm25 = BM25Okapi(self.section_tokens)
 
-def hybrid_strict_search(
-    query: str,
-    as_of_date: Optional[str] = None,
-    jurisdiction: Optional[str] = None,
-    top_k: int = 10,
-    bm25_candidates: int = 80,
-    alpha: float = 0.65,
-    beta: float = 0.35,
-    min_match_ratio: float = 0.5,
-    min_semantic_cosine: float = 0.20,
-) -> List[Dict]:
-    """
-    STRICT rules:
-    - If query tokens empty -> reject
-    - If no BM25 candidates -> reject (out-of-dataset)
-    - Act metadata match -> expand ALL sections from that Act, then hybrid rank
-    - Otherwise: BM25 gate + token overlap + LegalBERT rerank
-    """
-    as_of_date = as_of_date or today_str()
+        # embeddings
+        self.doc_emb = np.load(self._p_emb())
 
-    q_clean = clean_query(query)
-    q_tokens = tokenize(q_clean)
-    if not q_tokens:
-        return []
+        # model for query embeddings
+        # (this is much faster than embedding the whole corpus)
+        self.model = SentenceTransformer(self.model_name)
 
-    q_set = set(q_tokens)
+        # act expansion maps
+        self.act_to_sections.clear()
+        for i, s in enumerate(self.sections):
+            self.act_to_sections[s.get("act_id")].append(i)
 
-    # BM25 scores
-    bm25_scores = BM25.get_scores(q_tokens)
+        self.act_meta_tokens.clear()
+        for s in self.sections:
+            act_id = s.get("act_id")
+            meta = f"{s.get('act_id','')} {s.get('law','')} {s.get('act_title','')} {s.get('jurisdiction','')}"
+            self.act_meta_tokens[act_id].update(tokenize(meta))
 
-    # semantic query embedding
-    q_emb = MODEL.encode(q_clean, convert_to_numpy=True, normalize_embeddings=True)
+        self.ready = True
 
-  
-    # A) Act-level expansion when query matches Act metadata
-   
-    matching_acts = []
-    for act_id, meta_set in ACT_META_TOKENS.items():
-        if len(q_tokens) == 1:
-            if q_tokens[0] in meta_set:
-                matching_acts.append(act_id)
-        else:
-            overlap = len(q_set.intersection(meta_set))
-            if overlap / len(q_set) >= 0.6:
-                matching_acts.append(act_id)
+    # -----------------------------
+    # Search (same as your logic)
+    # -----------------------------
+    def search(
+        self,
+        query: str,
+        as_of_date: Optional[str] = None,
+        jurisdiction: Optional[str] = None,
+        top_k: int = 10,
+        bm25_candidates: int = 80,
+        alpha: float = 0.65,
+        beta: float = 0.35,
+        min_match_ratio: float = 0.5,
+        min_semantic_cosine: float = 0.20,
+    ) -> List[Dict]:
 
-    if matching_acts:
-        idxs = []
-        for act_id in matching_acts:
-            for idx in ACT_TO_SECTIONS.get(act_id, []):
-                doc = ALL_SECTIONS[idx]
-                if jurisdiction and doc.get("jurisdiction") != jurisdiction:
-                    continue
-                if not temporal_ok(doc, as_of_date):
-                    continue
-                idxs.append(idx)
+        if not self.ready:
+            raise RuntimeError("Search engine not loaded")
 
-        if not idxs:
+        as_of_date = as_of_date or today_str()
+
+        q_clean = clean_query(query)
+        q_tokens = tokenize(q_clean)
+        if not q_tokens:
             return []
 
-        idxs = sorted(set(idxs))
+        q_set = set(q_tokens)
+        bm25_scores = self.bm25.get_scores(q_tokens)
+        q_emb = self.model.encode(q_clean, convert_to_numpy=True, normalize_embeddings=True)
 
-        bm25_arr = np.array([float(bm25_scores[i]) for i in idxs], dtype=float)
+        # ACT expansion
+        matching_acts = []
+        for act_id, meta_set in self.act_meta_tokens.items():
+            if len(q_tokens) == 1:
+                if q_tokens[0] in meta_set:
+                    matching_acts.append(act_id)
+            else:
+                overlap = len(q_set.intersection(meta_set))
+                if overlap / len(q_set) >= 0.6:
+                    matching_acts.append(act_id)
+
+        if matching_acts:
+            idxs = []
+            for act_id in matching_acts:
+                for idx in self.act_to_sections.get(act_id, []):
+                    doc = self.sections[idx]
+                    if jurisdiction and doc.get("jurisdiction") != jurisdiction:
+                        continue
+                    if not temporal_ok(doc, as_of_date):
+                        continue
+                    idxs.append(idx)
+
+            if not idxs:
+                return []
+
+            idxs = sorted(set(idxs))
+            bm25_arr = np.array([float(bm25_scores[i]) for i in idxs], dtype=float)
+
+            if bm25_arr.max() == bm25_arr.min():
+                bm25_norm = np.ones_like(bm25_arr) if bm25_arr.max() > 0 else np.zeros_like(bm25_arr)
+            else:
+                bm25_norm = (bm25_arr - bm25_arr.min()) / (bm25_arr.max() - bm25_arr.min())
+
+            cosine = self.doc_emb[idxs] @ q_emb
+            sem01 = (cosine + 1.0) / 2.0
+            score = alpha * bm25_norm + beta * sem01
+
+            results = []
+            for j, idx in enumerate(idxs):
+                if cosine[j] < min_semantic_cosine and bm25_arr[j] <= 0.0:
+                    continue
+                results.append({
+                    "doc": self.sections[idx],
+                    "bm25": float(bm25_arr[j]),
+                    "bm25_norm": float(bm25_norm[j]),
+                    "semantic_cosine": float(cosine[j]),
+                    "score": float(score[j]),
+                })
+
+            results.sort(key=lambda x: x["score"], reverse=True)
+            return results[:top_k] if top_k else results
+
+        # Strict BM25 gate + overlap
+        required_hits = 1 if len(q_tokens) == 1 else max(1, int(np.ceil(min_match_ratio * len(q_tokens))))
+
+        candidates = []
+        for idx, doc in enumerate(self.sections):
+            if jurisdiction and doc.get("jurisdiction") != jurisdiction:
+                continue
+            if not temporal_ok(doc, as_of_date):
+                continue
+
+            b = float(bm25_scores[idx])
+            if b <= 0.0:
+                continue
+
+            overlap = len(q_set.intersection(self.section_token_sets[idx]))
+            if overlap < required_hits:
+                continue
+
+            candidates.append(idx)
+
+        if not candidates:
+            return []
+
+        candidates.sort(key=lambda i: float(bm25_scores[i]), reverse=True)
+        candidates = candidates[: min(len(candidates), bm25_candidates)]
+
+        bm25_arr = np.array([float(bm25_scores[i]) for i in candidates], dtype=float)
         if bm25_arr.max() == bm25_arr.min():
             bm25_norm = np.ones_like(bm25_arr) if bm25_arr.max() > 0 else np.zeros_like(bm25_arr)
         else:
             bm25_norm = (bm25_arr - bm25_arr.min()) / (bm25_arr.max() - bm25_arr.min())
 
-        cosine = DOC_EMB[idxs] @ q_emb
+        cosine = self.doc_emb[candidates] @ q_emb
         sem01 = (cosine + 1.0) / 2.0
         score = alpha * bm25_norm + beta * sem01
 
         results = []
-        for j, idx in enumerate(idxs):
-            # strict filter: avoid unrelated sections
-            if cosine[j] < min_semantic_cosine and bm25_arr[j] <= 0.0:
+        for j, idx in enumerate(candidates):
+            if cosine[j] < min_semantic_cosine:
                 continue
             results.append({
-                "doc": ALL_SECTIONS[idx],
+                "doc": self.sections[idx],
                 "bm25": float(bm25_arr[j]),
                 "bm25_norm": float(bm25_norm[j]),
                 "semantic_cosine": float(cosine[j]),
                 "score": float(score[j]),
             })
 
-        if not results:
-            return []
-
         results.sort(key=lambda x: x["score"], reverse=True)
         return results[:top_k] if top_k else results
-
-   
-    # B) Section-level strict BM25 gate + overlap
-
-    required_hits = 1 if len(q_tokens) == 1 else max(1, int(np.ceil(min_match_ratio * len(q_tokens))))
-
-    candidates = []
-    for idx, doc in enumerate(ALL_SECTIONS):
-        if jurisdiction and doc.get("jurisdiction") != jurisdiction:
-            continue
-        if not temporal_ok(doc, as_of_date):
-            continue
-
-        b = float(bm25_scores[idx])
-        if b <= 0.0:
-            continue
-
-        overlap = len(q_set.intersection(SECTION_TOKEN_SETS[idx]))
-        if overlap < required_hits:
-            continue
-
-        candidates.append(idx)
-
-    # strict: out-of-dataset => reject
-    if not candidates:
-        return []
-
-    candidates.sort(key=lambda i: float(bm25_scores[i]), reverse=True)
-    candidates = candidates[: min(len(candidates), bm25_candidates)]
-
-    bm25_arr = np.array([float(bm25_scores[i]) for i in candidates], dtype=float)
-    if bm25_arr.max() == bm25_arr.min():
-        bm25_norm = np.ones_like(bm25_arr) if bm25_arr.max() > 0 else np.zeros_like(bm25_arr)
-    else:
-        bm25_norm = (bm25_arr - bm25_arr.min()) / (bm25_arr.max() - bm25_arr.min())
-
-    cosine = DOC_EMB[candidates] @ q_emb
-    sem01 = (cosine + 1.0) / 2.0
-    score = alpha * bm25_norm + beta * sem01
-
-    results = []
-    for j, idx in enumerate(candidates):
-        if cosine[j] < min_semantic_cosine:
-            continue
-        results.append({
-            "doc": ALL_SECTIONS[idx],
-            "bm25": float(bm25_arr[j]),
-            "bm25_norm": float(bm25_norm[j]),
-            "semantic_cosine": float(cosine[j]),
-            "score": float(score[j]),
-        })
-
-    if not results:
-        return []
-
-    results.sort(key=lambda x: x["score"], reverse=True)
-    return results[:top_k] if top_k else results
-
-
-
-# CLI helper
-
-def parse_query(line: str) -> Tuple[str, Optional[str]]:
-    line = line.strip()
-    jur = None
-    m = re.match(r"jurisdiction\s*:\s*([A-Za-z_]+)\s+(.*)$", line, flags=re.I)
-    if m:
-        jur = m.group(1)
-        q = m.group(2).strip()
-        return q, jur
-    return line, None
-
-
-#  Run interactively
-
-if __name__ == "__main__":
-    print("\n HYBRID STRICT Search THROUGH KG (Neo4j → BM25 → LegalBERT)")
-    print("Type your query. Type 'exit' to quit.\n")
-
-    while True:
-        line = input("Enter query: ").strip()
-        if not line:
-            continue
-        if line.lower() in {"exit", "quit"}:
-            break
-
-        q, jur = parse_query(line)
-
-        results = hybrid_strict_search(
-            query=q,
-            as_of_date=today_str(),
-            jurisdiction=jur,
-            top_k=0,
-            bm25_candidates=80,
-            alpha=0.65,
-            beta=0.35,
-            min_match_ratio=0.5,
-            min_semantic_cosine=0.20,
-        )
-
-        q_show = clean_query(q)
-        print(f"\nQuery       : {q_show}")
-        print(f"As of date  : {today_str()}")
-        print(f"Jurisdiction: {jur or 'ALL'}")
-
-        if not results:
-            print(" No results found! query not present in KG.\n")
-            continue
-
-        print(f"Top results : {len(results)}")
-
-        for i, r in enumerate(results, start=1):
-            doc = r["doc"]
-            print("\n" + "=" * 80)
-            print(
-                f"[{i}] {doc.get('act_id')} ({doc.get('jurisdiction')}) "
-                f"s.{doc.get('section_no')} - {doc.get('section_title')}"
-            )
-            print(f"    Hybrid score    : {r['score']:.4f}")
-            print(f"    BM25 score      : {r['bm25']:.4f} (norm={r['bm25_norm']:.4f})")
-            print(f"    Semantic cosine : {r['semantic_cosine']:.4f}")
-            print(f"    Law             : {doc.get('law')}")
-            print(f"    Act title       : {doc.get('act_title')}")
-            print(f"    Version ID      : {doc.get('version_id')}")
-            print(f"    Valid from      : {doc.get('valid_from')}")
-            print(f"    Current status  : {doc.get('current_status')}")
-            print(f"    Citations       : {doc.get('citations')}")
-            print(f"    Amended by      : {doc.get('amended_by')}")
-            print(f"    Repealed by     : {doc.get('repealed_by')}")
-
-            text = doc.get("text", "")
-            snippet = text[:300] + ("..." if len(text) > 300 else "")
-            print(f"    Text            : {snippet}")
-
-        print()

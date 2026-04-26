@@ -47,6 +47,8 @@ def update_user_profile(db: Session, user_id: str, user_data: UserUpdate) -> Use
         user.full_name = user_data.full_name
     if user_data.phone is not None:
         user.phone = user_data.phone
+    if user_data.profile_icon_url is not None:
+        user.profile_icon_url = user_data.profile_icon_url
     
     db.commit()
     db.refresh(user)
