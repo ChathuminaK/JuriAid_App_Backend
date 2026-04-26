@@ -1,6 +1,6 @@
 import re
 from collections import Counter, defaultdict
-from typing import Dict, Any, List
+from typing import Dict, Any, List, Set
 
 from app.case_law_engine import tokenize, clean_query
 
@@ -11,32 +11,69 @@ S_DOT_PAT = re.compile(r"\bs\.\s*(\d{1,4}[A-Za-z]?)\b", re.IGNORECASE)
 STOPWORDS = {
     "the", "and", "or", "to", "of", "in", "on", "for", "a", "an", "is", "are", "was", "were", "be",
     "plaintiff", "defendant", "respondent", "petitioner", "court", "honourable", "case", "number",
-    # OCR boilerplate from page headers and CSV metadata lines
     "page", "nature", "regular", "value", "true", "copy", "procedure",
-    # high-frequency legal filler with zero topical signal
     "state", "states", "stated", "submit", "submitted", "pray", "prays",
     "respectfully", "hereby", "said", "herein", "above", "named",
 }
 
-# CHANGE:
-# Topic detection added to keep only legally relevant results
 TOPIC_KEYWORDS = {
-    "adultery": ["adultery", "affair", "co-respondent", "co respondent"],
-    "malicious_desertion": ["desertion", "malicious desertion", "constructive desertion", "abandon"],
-    "cruelty": ["cruelty", "violent", "violence", "abuse"],
-    "nullity_of_marriage": ["nullity", "void marriage", "invalid marriage", "null and void"],
-    "alimony_and_financial": ["alimony", "maintenance", "financial support", "money", "payment"],
-    "consummation": ["consummation", "copulate", "sexual intercourse"],
-    "customary_marriage_and_presumption": ["customary marriage", "presumption of marriage", "habit and repute"],
-    "jurisdiction_and_procedure": ["jurisdiction", "district court", "procedure", "plaint", "answer"],
-    "condonation_and_connivance": ["condonation", "connivance", "forgiveness", "reconciliation"],
-    "muslim_law": ["muslim", "quazi", "islamic", "repudiating contract of marriage"],
-    "decree_nisi": ["decree nisi", "nisi declaration", "nisi absolute", "make absolute", "decree absolute"],
+    "adultery": [
+        "adultery", "affair", "co-respondent", "co respondent", "illicit relationship"
+    ],
+    "malicious_desertion": [
+        "malicious desertion", "constructive desertion", "desertion", "abandon",
+        "abandoned", "left the matrimonial home", "left home", "animus deserendi"
+    ],
+    "cruelty": [
+        "cruelty", "mental cruelty", "physical cruelty", "abuse", "assault",
+        "violence", "violent", "harassment"
+    ],
+    "nullity_of_marriage": [
+        "nullity", "void marriage", "invalid marriage", "fraud", "concealed pregnancy"
+    ],
+    "alimony_and_financial": [
+        "alimony", "maintenance", "financial support", "money", "payment"
+    ],
+    "consummation": [
+        "consummation", "non-consummation", "sexual intercourse", "impotence", "impotent"
+    ],
+    "condonation_and_connivance": [
+        "condonation", "connivance", "forgiveness", "reconciliation"
+    ],
+    "decree_nisi": [
+        "decree nisi", "nisi declaration", "decree absolute", "make absolute"
+    ],
 }
 
-# Strips procedural boilerplate noise from PDF text before keyword extraction
+# stronger phrase-level legal fact patterns
+FACT_PATTERNS = {
+    "adultery": [
+        "adultery", "co-respondent", "sexual relationship", "extramarital relationship", "affair"
+    ],
+    "desertion": [
+        "desertion", "malicious desertion", "constructive desertion", "abandoned",
+        "left the matrimonial home", "refused to return", "animus deserendi"
+    ],
+    "cruelty": [
+        "cruelty", "mental cruelty", "physical cruelty", "abuse", "assault",
+        "threat", "violence", "harassment"
+    ],
+    "maintenance": [
+        "maintenance", "alimony", "financial support", "expenses", "money", "payment"
+    ],
+    "nullity": [
+        "nullity", "fraud", "void marriage", "concealed pregnancy", "deception"
+    ],
+    "impotence": [
+        "impotence", "impotent", "non consummation", "non-consummation", "sexual incapacity"
+    ],
+    "reconciliation": [
+        "reconciliation", "forgiveness", "resumed cohabitation", "returned to live together"
+    ],
+}
+
 _NOISE_RE = re.compile(
-    r"(\[?Page\s*\d+\]?"              # [Page 1] or Page 1 (after bracket-strip)
+    r"(\[?Page\s*\d+\]?"
     r"|Case Number\s*:.*"
     r"|No\.\s*\d+[/,].*"
     r"|Attorney.at.Law.*"
@@ -60,7 +97,7 @@ def _strip_noise(text: str) -> str:
     return re.sub(r"\s+", " ", text).strip()
 
 
-def extract_keywords(text: str, top_k: int = 30) -> List[str]:
+def extract_keywords(text: str, top_k: int = 25) -> List[str]:
     toks = [w.lower() for w in WORD_RE.findall(text)]
     toks = [w for w in toks if w not in STOPWORDS and len(w) >= 3]
     freq = Counter(toks)
@@ -68,31 +105,41 @@ def extract_keywords(text: str, top_k: int = 30) -> List[str]:
     return strong[:top_k] if strong else [w for w, _ in freq.most_common(top_k)]
 
 
-def extract_sections(text: str, limit: int = 10) -> List[str]:
+def extract_sections(text: str, limit: int = 8) -> List[str]:
     found = SECTION_PAT.findall(text) + S_DOT_PAT.findall(text)
     freq = Counter([x.strip() for x in found if x.strip()])
     return [s for s, _ in freq.most_common(limit)]
 
 
 def detect_topics(text: str) -> List[str]:
-    text = text.lower()
+    text_l = text.lower()
     detected = []
-
     for topic, keys in TOPIC_KEYWORDS.items():
         for key in keys:
-            if key in text:
+            if key in text_l:
                 detected.append(topic)
                 break
-
     return detected
+
+
+def extract_fact_terms(text: str) -> Set[str]:
+    text_l = text.lower()
+    found = set()
+    for label, patterns in FACT_PATTERNS.items():
+        for p in patterns:
+            if p in text_l:
+                found.add(label)
+                break
+    return found
 
 
 def build_queries(case_text: str) -> List[str]:
     t = clean_query(case_text)
-    clean_t = _strip_noise(t)          # strip procedural noise before keyword extraction
-    keywords = extract_keywords(clean_t)
-    sections = extract_sections(t)     # sections from original text
+    clean_t = _strip_noise(t)
+    keywords = extract_keywords(clean_t, top_k=20)
+    sections = extract_sections(t)
     detected_topics = detect_topics(t)
+    fact_terms = extract_fact_terms(t)
 
     queries = []
 
@@ -100,16 +147,19 @@ def build_queries(case_text: str) -> List[str]:
         queries.append(" ".join(keywords[:10]))
         queries.append(" ".join(keywords[:6]))
 
-    for s in sections[:6]:
+    for topic in detected_topics:
+        queries.append(topic.replace("_", " "))
+
+    for fact in sorted(fact_terms):
+        queries.append(fact)
+
+    for s in sections[:4]:
         queries.append(f"section {s}")
         if keywords:
-            queries.append(f"section {s} " + " ".join(keywords[:6]))
+            queries.append(f"section {s} " + " ".join(keywords[:4]))
 
-    # CHANGE:
-    # add topic names as strong queries
-    for topic in detected_topics:
-        topic_phrase = topic.replace("_", " ")
-        queries.append(topic_phrase)
+    if detected_topics and keywords:
+        queries.append(f"{detected_topics[0].replace('_', ' ')} " + " ".join(keywords[:5]))
 
     seen = set()
     out = []
@@ -119,13 +169,11 @@ def build_queries(case_text: str) -> List[str]:
             seen.add(q)
             out.append(q)
 
-    # CHANGE:
-    # fewer queries -> less noise
-    return out[:8]
+    return out[:10]
 
 
-def support_score(case_text: str, doc: Dict[str, Any]) -> float:
-    blob = " ".join([
+def _doc_blob(doc: Dict[str, Any]) -> str:
+    return " ".join([
         doc.get("section_title") or "",
         doc.get("section_content") or "",
         doc.get("case_name") or "",
@@ -133,13 +181,82 @@ def support_score(case_text: str, doc: Dict[str, Any]) -> float:
         " ".join(doc.get("held") or []),
         " ".join(doc.get("principle") or []),
         doc.get("topic") or "",
-    ])
+        " ".join(doc.get("relevant_laws") or []),
+        " ".join(doc.get("relevant_sections") or []),
+    ]).strip()
+
+
+def support_score(case_text: str, doc: Dict[str, Any]) -> float:
+    blob = _doc_blob(doc)
     c = set(tokenize(case_text))
     d = set(tokenize(blob))
     if not c or not d:
         return 0.0
-    intersection = len(c & d)
-    return intersection / (len(c | d) + 1e-6)   # Jaccard: fair regardless of doc size
+    return len(c & d) / (len(c | d) + 1e-6)
+
+
+def issue_overlap_score(case_text: str, doc: Dict[str, Any]) -> float:
+    case_topics = set(detect_topics(case_text))
+    if not case_topics:
+        return 0.0
+
+    doc_topic = (doc.get("topic") or "").strip().lower()
+    if not doc_topic:
+        return 0.0
+
+    return 1.0 if doc_topic in case_topics else 0.0
+
+
+def fact_overlap_score(case_text: str, doc: Dict[str, Any]) -> float:
+    case_facts = extract_fact_terms(case_text)
+    if not case_facts:
+        return 0.0
+
+    blob = _doc_blob(doc).lower()
+    matched = 0
+    for fact_label, patterns in FACT_PATTERNS.items():
+        if fact_label not in case_facts:
+            continue
+        if any(p in blob for p in patterns):
+            matched += 1
+
+    return matched / max(1, len(case_facts))
+
+
+def phrase_match_score(case_text: str, doc: Dict[str, Any]) -> float:
+    """
+    Stronger exact phrase matching for decisive legal facts.
+    """
+    blob = _doc_blob(doc).lower()
+    text_l = case_text.lower()
+
+    all_phrases = []
+    for _, patterns in FACT_PATTERNS.items():
+        all_phrases.extend(patterns)
+
+    case_phrases = [p for p in all_phrases if p in text_l]
+    if not case_phrases:
+        return 0.0
+
+    matched = sum(1 for p in case_phrases if p in blob)
+    return matched / max(1, len(case_phrases))
+
+
+def citation_section_score(case_text: str, doc: Dict[str, Any]) -> float:
+    """
+    Reward explicit law/section overlap if the uploaded case mentions sections.
+    """
+    text_l = case_text.lower()
+    doc_sections = [str(x).lower() for x in (doc.get("relevant_sections") or [])]
+    if not doc_sections:
+        return 0.0
+
+    hits = 0
+    for s in doc_sections:
+        if s and s in text_l:
+            hits += 1
+
+    return hits / max(1, len(doc_sections))
 
 
 def retrieve_case_law_from_case(engine, case_text: str, top_k: int = 5) -> Dict[str, Any]:
@@ -151,23 +268,25 @@ def retrieve_case_law_from_case(engine, case_text: str, top_k: int = 5) -> Dict[
     for q in queries:
         res = engine.search(
             query=q,
-            top_k=15,
-            bm25_candidates=120,
-            alpha=0.55,              # CHANGE: align with stricter search
+            top_k=25,
+            bm25_candidates=200,
+            alpha=0.55,
             beta=0.45,
-            min_match_ratio=0.50,
-            min_semantic_cosine=0.35
+            min_match_ratio=0.30,
+            min_semantic_cosine=0.30
         )
         all_hits.append(res)
 
-    bucket = defaultdict(lambda: {"best": None, "scores": [], "hits": 0})
+    bucket = defaultdict(lambda: {"best": None, "scores": [], "hits": 0, "ranks": []})
 
     for hit_list in all_hits:
-        for r in hit_list:
+        for rank, r in enumerate(hit_list, start=1):
             d = r["doc"]
             key = d["case_id"]
             bucket[key]["hits"] += 1
             bucket[key]["scores"].append(r["score"])
+            bucket[key]["ranks"].append(rank)
+
             if bucket[key]["best"] is None or r["score"] > bucket[key]["best"]["score"]:
                 bucket[key]["best"] = r
 
@@ -177,29 +296,60 @@ def retrieve_case_law_from_case(engine, case_text: str, top_k: int = 5) -> Dict[
         if not best:
             continue
 
-        # CHANGE:
-        # topic filtering to remove unrelated laws
-        if detected_topics:
-            doc_topic = (best["doc"].get("topic") or "").strip().lower()
-            if doc_topic not in [t.lower() for t in detected_topics]:
-                continue
+        doc = best["doc"]
+        doc_topic = (doc.get("topic") or "").strip().lower()
 
-        sup = support_score(case_text, best["doc"])
+        # stronger topic penalty
+        topic_penalty = 0.0
+        if detected_topics and doc_topic and doc_topic not in [t.lower() for t in detected_topics]:
+            topic_penalty = 0.25
 
-        # CHANGE:
-        # stronger support-score weight
-        final = max(v["scores"]) + 0.10 * (v["hits"] - 1) + 0.45 * sup
+        sup = support_score(case_text, doc)
+        issue_score = issue_overlap_score(case_text, doc)
+        fact_score = fact_overlap_score(case_text, doc)
+        phrase_score = phrase_match_score(case_text, doc)
+        section_score = citation_section_score(case_text, doc)
+
+        max_score = max(v["scores"])
+        avg_score = sum(v["scores"]) / len(v["scores"])
+        hit_bonus = 0.06 * min(5, max(0, v["hits"] - 1))
+        rank_bonus = 1.0 / min(v["ranks"])  # reciprocal-rank style
+
+        final = (
+            0.25 * max_score +
+            0.15 * avg_score +
+            0.15 * sup +
+            0.15 * issue_score +
+            0.15 * fact_score +
+            0.10 * phrase_score +
+            0.05 * section_score +
+            0.05 * rank_bonus +
+            hit_bonus -
+            topic_penalty
+        )
 
         best["final_score"] = float(final)
         best["support_score"] = float(sup)
+        best["issue_score"] = float(issue_score)
+        best["fact_score"] = float(fact_score)
+        best["phrase_score"] = float(phrase_score)
+        best["section_score"] = float(section_score)
         best["query_hits"] = int(v["hits"])
         merged.append(best)
 
-    # CHANGE:
-    # remove weak matches
-    merged = [m for m in merged if m["final_score"] > 0.45]
+    merged = [m for m in merged if m["final_score"] >= 0.30]
 
-    merged.sort(key=lambda x: x["final_score"], reverse=True)
+    merged.sort(
+        key=lambda x: (
+            x["final_score"],
+            x["issue_score"],
+            x["fact_score"],
+            x["phrase_score"],
+            x["support_score"],
+            x["score"],
+        ),
+        reverse=True
+    )
 
     out = []
     for r in merged[:top_k]:
@@ -220,13 +370,17 @@ def retrieve_case_law_from_case(engine, case_text: str, top_k: int = 5) -> Dict[
             "amending_law": d.get("amending_law"),
             "confidence_score": round(r["final_score"], 3),
             "support_score": round(r["support_score"], 3),
+            "issue_score": round(r["issue_score"], 3),
+            "fact_score": round(r["fact_score"], 3),
+            "phrase_score": round(r["phrase_score"], 3),
+            "section_score": round(r["section_score"], 3),
             "query_hits": r["query_hits"],
             "detail_url": f"/case-law/{d.get('case_id')}"
         })
 
     return {
         "queries_generated": queries,
-        "detected_topics": detected_topics,   # CHANGE: useful for debugging and evaluation
+        "detected_topics": detected_topics,
         "results_count": len(out),
         "relevant_case_laws": out
     }
